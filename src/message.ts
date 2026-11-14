@@ -5,6 +5,8 @@ import { Commit, FilePatch } from './model'
 
 export const Message = defineMessageUnion({
   // repository
+  ClickedOpen: {},
+  PickCancelled: {},
   PickedRepo: { path: Schema.String },
   OpenedRepo: { name: Schema.String, root: Schema.String },
   FailedOpen: { message: Schema.String },

@@ -268,8 +268,33 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           ? card(
               'Nothing open yet',
               h.div([], [
-                h.p([h.Class(`mt-1 text-[11.5px] ${dim}`)], ['Pick a repository; the last one comes back on launch.']),
-                primary('Open repository…', Message.PickedRepo({ path: 'C:\\work\\acme-api' }), h),
+                h.p([h.Class(`mt-1 text-[11.5px] ${dim}`)], [
+                  'Pick a repository; the last one comes back on launch.',
+                ]),
+                primary('Open repository…', Message.ClickedOpen(), h),
+                ...(model.recents.length === 0
+                  ? []
+                  : [
+                      h.div([h.Class('mt-4 border-t border-[#1f2733] pt-2 text-left')], [
+                        h.span([h.Class(`font-mono text-[10px] ${quiet}`)], ['Recent']),
+                        ...model.recents.map(entry =>
+                          h.button(
+                            [
+                              h.OnClick(Message.PickedRepo({ path: entry.root })),
+                              h.Class(
+                                'mt-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-[#161b22]',
+                              ),
+                            ],
+                            [
+                              h.span([h.Class('truncate font-mono text-[11px] text-[#e6edf3]')], [
+                                entry.name,
+                              ]),
+                              h.span([h.Class(`truncate font-mono text-[10px] ${quiet}`)], [entry.root]),
+                            ],
+                          ),
+                        ),
+                      ]),
+                    ]),
               ]),
               h,
             )
@@ -278,7 +303,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                 model.error.kind === 'git-missing' ? 'git is not on PATH' : 'Could not open that repository',
                 h.div([], [
                   h.p([h.Class(`mt-1 text-[11.5px] ${dim}`)], [model.error.message]),
-                  primary('Choose another folder…', Message.PickedRepo({ path: 'C:\\work\\acme-api' }), h),
+                  primary('Choose another folder…', Message.ClickedOpen(), h),
                 ]),
                 h,
               )

@@ -1,7 +1,7 @@
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { DebouncedSearch, LoadPatch, LoadSelection, update } from '../src/app'
+import { DebouncedSearch, LoadPatch, LoadRefs, LoadSelection, update } from '../src/app'
 import { Message } from '../src/message'
 import type { Model } from '../src/model'
 
@@ -227,6 +227,51 @@ describe('files and roots', () => {
       message(Message.SucceededSelection({ files: [], roots: ['root-1'] })),
       model(m => {
         expect(m.roots.length).toBe(1)
+      }),
+    )
+  })
+})
+
+describe('recents', () => {
+  const refs = Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] }))
+
+  test('opening a repository puts it first', () => {
+    story(
+      update,
+      given({ ...base, repo: null, recents: [] }),
+      message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      refs,
+      model(m => {
+        expect(m.recents[0]?.root).toBe('C:\\work\\other')
+      }),
+    )
+  })
+
+  test('reopening moves it up instead of duplicating it', () => {
+    story(
+      update,
+      given({ ...base, recents: [repo, { name: 'other', root: 'C:\\work\\other' }] }),
+      message(Message.OpenedRepo({ name: repo.name, root: repo.root })),
+      refs,
+      model(m => {
+        expect(m.recents.map(entry => entry.root)).toEqual(['C:\\work\\acme-api', 'C:\\work\\other'])
+      }),
+    )
+  })
+
+  test('the list stops at ten', () => {
+    const many = Array.from({ length: 10 }, (_, index) => ({
+      name: `r${index}`,
+      root: `C:\\work\\r${index}`,
+    }))
+    story(
+      update,
+      given({ ...base, recents: many }),
+      message(Message.OpenedRepo({ name: 'new', root: 'C:\\work\\new' })),
+      refs,
+      model(m => {
+        expect(m.recents.length).toBe(10)
+        expect(m.recents[0]?.root).toBe('C:\\work\\new')
       }),
     )
   })

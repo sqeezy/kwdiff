@@ -2,6 +2,7 @@ import { Effect, Schema } from 'effect'
 import { Command, Subscription, type Update } from 'foldkit'
 import { focus, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
+import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
@@ -12,6 +13,21 @@ import type { FilePatch, RootOf } from './types'
 const DEBOUNCE = '250 millis'
 
 // ---- commands --------------------------------------------------------------
+
+const PickRepo = Command.define('PickRepo', {
+  messages: [Message.PickedRepo, Message.PickCancelled],
+  execute: Effect.promise(() =>
+    isTauri()
+      ? open({ directory: true, multiple: false, title: 'Open repository' }).then(
+          picked =>
+            typeof picked === 'string' && picked.length > 0
+              ? Message.PickedRepo({ path: picked })
+              : Message.PickCancelled(),
+          () => Message.PickCancelled(),
+        )
+      : Promise.resolve(Message.PickedRepo({ path: devRepo.root })),
+  ),
+})
 
 const OpenRepo = Command.define('OpenRepo', {
   args: { path: Schema.String },
@@ -39,7 +55,7 @@ const LoadConfig = Command.define('LoadConfig', {
     ),
 })
 
-const LoadRefs = Command.define('LoadRefs', {
+export const LoadRefs = Command.define('LoadRefs', {
   args: { repo: Schema.String },
   messages: [Message.SucceededRefs, Message.FailedOpen],
   execute: ({ repo }) =>
@@ -163,6 +179,10 @@ const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => ({
 export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
   Message.match<Update.Return<Model, Message>>(message, {
     PickedRepo: ({ path }) => ({ model, commands: [OpenRepo({ path })] }),
+
+    ClickedOpen: () => ({ model, commands: [PickRepo()] }),
+
+    PickCancelled: () => ({ model }),
 
     OpenedRepo: ({ name, root }) => {
       const repo = { name, root }
@@ -390,6 +410,8 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 // config file, so the window opens the fixture repository and runs one search.
 // The desktop build starts on state 01 and lets Rust answer `open_repo`.
 const devRepo = { name: 'acme-api', root: 'C:\\work\\acme-api' }
+
+export { devRepo }
 
 const emptyModel: Model = {
   repo: null,

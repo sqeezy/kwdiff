@@ -1,7 +1,7 @@
 {
   "name": "kwdiff",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
     "effect": "4.1.4",
     "foldkit": "0.170.0"
   },

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The native folder picker (`tauri-plugin-dialog`) behind *Open repository…*,
+  and the recents list on the launch card, each entry opening its root.
+- 3 more story tests: recents order, no duplicates, the ten-entry cap.
+
+## [0.2.1] - 2026-11-14
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
