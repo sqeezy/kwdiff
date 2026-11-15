@@ -11,35 +11,13 @@ export const setViewer = (view: CodeView | null): void => {
 }
 
 let hunks: ReadonlyArray<Readonly<{ id: string; line: number }>> = []
-let scroller: HTMLElement | null = null
 
-// Pierre paints into a `diffs-container` element *inside* the host we hand it,
-// and that element is created asynchronously — so the scroll container is
-// searched for, retried, and cached.
-export const setScrollHost = (host: HTMLElement | null): void => {
-  scroller = null
-  if (host === null) return
-
-  const search = (attempt: number): void => {
-    const hosts = [host, ...host.querySelectorAll<HTMLElement>('*')]
-    const shadow = hosts.map(node => node.shadowRoot).find((root): root is ShadowRoot => root !== null)
-    if (shadow !== null && shadow !== undefined) {
-      const found = [...shadow.querySelectorAll<HTMLElement>('*')].find(
-        element => element.scrollHeight > element.clientHeight + 4,
-      )
-      if (found !== undefined) {
-        scroller = found
-        return
-      }
-    }
-    if (attempt < 30) requestAnimationFrame(() => search(attempt + 1))
-  }
-
-  requestAnimationFrame(() => search(0))
-}
-
+// The pane is the scroll surface (the viewer renders full height inside it),
+// so line scrolling talks to the pane element, not to anything in the shadow
+// root.
 export const scrollByLines = (delta: number): void => {
-  scroller?.scrollBy({ top: delta * 20, behavior: 'instant' })
+  const pane = document.getElementById('diff-pane')
+  pane?.scrollBy({ top: delta * 24, behavior: 'instant' })
 }
 
 // Each hunk belongs to a file item (`f0`, `f1`, …) and an added-side line.

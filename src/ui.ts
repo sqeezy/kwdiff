@@ -295,7 +295,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.Attribute('id', 'diff-pane'),
                   h.Attribute('tabindex', '0'),
                   h.Attribute('aria-label', 'Diff'),
-                  h.Class('min-h-0 flex-1 overflow-hidden outline-none'),
+                  h.Class('min-h-0 flex-1 overflow-auto outline-none'),
                 ],
                 [
                   h.keyed('div')(

@@ -7,7 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
-import { scrollByLines, scrollToHunk, setHunks, setScrollHost, setViewer } from './viewer'
+import { scrollByLines, scrollToHunk, setHunks, setViewer } from './viewer'
 import { Message } from './message'
 import type { Model } from './model'
 import type { FilePatch, RootOf } from './types'
@@ -200,7 +200,6 @@ const MountDiff = Mount.define('MountDiff', {
           files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
         )
         setHunks(patch)
-        setScrollHost(element as HTMLElement)
         setViewer(view)
         return view
       }),
