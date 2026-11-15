@@ -45,3 +45,14 @@ export const scrollToHunk = (index: number): void => {
     align: 'start',
   })
 }
+
+// Dev-only handle: the viewer lives in a shadow root, so the only way to see
+// what the keyboard is talking to is to expose it. Stripped from production
+// builds by the `import.meta.env.DEV` guard.
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  ;(window as unknown as { __kwdiff: unknown }).__kwdiff = {
+    hunkTargets,
+    scrollToHunk,
+    state: () => ({ hasView: current !== null, hunks }),
+  }
+}
