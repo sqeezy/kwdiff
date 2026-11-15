@@ -1,9 +1,8 @@
-# Linear import
+# Linear import — done
 
-The tracker moves to a fresh Linear project; the repo keeps the specification
-and the closed wayfinder map as history. This file is the issue set to create,
-in order, with the reason each exists. Delete it once Linear is the live
-tracker.
+Created 2026-11-15: project **kwdiff** (P-ANT-5), team anton, issues ANT-60…ANT-69.
+Linear is the live tracker now; this file keeps the reasoning behind each issue,
+which is why they exist in this order. Edit the issues there, not here.
 
 Project: **kwdiff** — "Review patches across branches with no common ancestor".
 
