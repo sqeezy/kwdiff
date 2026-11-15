@@ -45,3 +45,12 @@ is the point. New behaviour gets a test there before it gets a screenshot.
 
 `prototype/foldkit-gui` holds the three-variant UI prototype that produced this
 design. It is a reference, never merged.
+
+## The test bench
+
+The Windows checkout under test must be a **full clone**. A `git fetch --depth=N`
+leaves a shallow boundary that silently truncates history: `git log main` shows
+the depth, not the repository, and every "why is history missing" report becomes
+a false alarm. `git rev-parse --is-shallow-repository` answers it; `git fetch
+--unshallow https://github.com/sqeezy/kwdiff.git '+refs/heads/*:refs/remotes/origin/*'`
+fixes it. Prefer HTTPS on the bench: its `origin` (an SSH alias) may have no key.
