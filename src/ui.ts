@@ -430,7 +430,6 @@ const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['esc', 'one pane back, close this list'],
   ['n / p', 'next / previous hunk in the diff'],
   ['g / shift+g', 'first / last hunk'],
-  ['v', 'unified / split view'],
   ['/', 'jump to the search field'],
   ['?', 'this list'],
 ]

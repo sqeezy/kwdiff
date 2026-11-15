@@ -65,7 +65,6 @@ export const Message = defineMessageUnion({
   ScrolledDiff: {},
   ElementFocused: {},
   DiffMounted: {},
-  ToggledDiffStyle: {},
 
 })
 export type Message = typeof Message.Type

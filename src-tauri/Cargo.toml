@@ -1,6 +1,6 @@
 [package]
 name = "kwdiff"
-version = "0.2.8"
+version = "0.2.9"
 description = "Review changes across branches that share no ancestor"
 edition = "2021"
 rust-version = "1.77"

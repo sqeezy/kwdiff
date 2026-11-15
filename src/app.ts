@@ -571,11 +571,6 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     ElementFocused: () => ({ model }),
     DiffMounted: () => ({ model }),
 
-    ToggledDiffStyle: () => ({
-      model: modifyFields(model, {
-        diffStyle: () => (model.diffStyle === 'unified' ? 'split' : 'unified'),
-      }),
-    }),
 
     ToggledKeymap: () => ({
       model: modifyFields(model, { showKeymap: () => !model.showKeymap }),
@@ -617,7 +612,6 @@ const emptyModel: Model = {
   showKeymap: false,
   pane: 'search',
   hunkIndex: 0,
-  diffStyle: 'unified',
   branches: [],
   searching: false,
   searchId: 0,
@@ -666,7 +660,6 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'Shift+G', mapEvent: () => Message.JumpedHunk({ to: 'bottom' }) },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
-        { keys: 'v', mapEvent: () => Message.ToggledDiffStyle() },
       ],
     }),
   ),

@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-11-15
+
+### Changed
+
+- **The diff pane is ours again.** @pierre/diffs' CodeView virtualises against
+  its own viewport while the pane scrolled the full content, so the two
+  positions desynced and the scrollbar disconnected after a hunk jump. The pane
+  is now a single `<pre>` scroller with hunk anchors; verified on a Windows
+  machine (one scroller, 1207 px content in a 362 px viewport, PageDown 0 → 316).
+
+### Removed
+
+- `@pierre/diffs`, the split-view toggle (`v`) and the dead `diffStyle` model
+  field. Split view and syntax colour return in their own effort, not in v1.
+
 ## [0.2.8] - 2026-11-15
 
 ### Fixed

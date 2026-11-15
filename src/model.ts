@@ -40,7 +40,6 @@ export const Model = Schema.Struct({
   showKeymap: Schema.Boolean,
   pane: Schema.Literals(['search', 'commits', 'files', 'diff']),
   hunkIndex: Schema.Number,
-  diffStyle: Schema.Literals(['unified', 'split']),
   branches: Schema.Array(Schema.Struct({ root: Schema.String, branch: Schema.String })),
   searching: Schema.Boolean,
   searchId: Schema.Number,
