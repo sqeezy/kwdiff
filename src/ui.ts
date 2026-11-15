@@ -1,5 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import { MountDiff } from './app'
 import { Message } from './message'
 import type { Model } from './model'
 
@@ -256,7 +257,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         h.section([h.Class('flex min-h-0 flex-col'), h.OnClick(Message.BlurRequested())], [
           h.div([h.Class(`flex items-center gap-2 border-b ${border} ${panel} px-3 py-1.5`)], [
             h.span([h.Class('truncate font-mono text-[11.5px] text-[#e6edf3]')], [
-              model.files[model.fileIndex]?.path ?? 'no file',
+              // Pierre renders its own file header inside the patch pane.
+              model.patch === null ? model.files[model.fileIndex]?.path ?? 'no file' : '',
             ]),
           ]),
           model.lastError === null
@@ -288,16 +290,23 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                   ? 'Tick a commit to see its patch.'
                   : 'Loading patch…',
               ])
-            : h.pre(
+            : h.div(
                 [
                   h.Attribute('id', 'diff-pane'),
                   h.Attribute('tabindex', '0'),
                   h.Attribute('aria-label', 'Diff'),
-                  h.Class(
-                    'max-h-[46vh] overflow-auto py-1.5 font-mono text-[11.5px] leading-[1.6] outline-none focus-visible:ring-1 focus-visible:ring-[#3fb950] lg:max-h-none',
+                  h.Class('min-h-0 flex-1 overflow-hidden outline-none'),
+                ],
+                [
+                  h.keyed('div')(
+                    `${model.patchId}:${model.diffStyle}`,
+                    [
+                      h.Class('h-full min-h-[240px]'),
+                      h.OnMount(MountDiff({ patch: model.patch, style: model.diffStyle })),
+                    ],
+                    [],
                   ),
                 ],
-                renderPatch(model.patch, model.hunkIndex, h),
               ),
         ]),
 
@@ -406,29 +415,7 @@ const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['esc', 'one pane back, close this list'],
   ['n / p', 'next / previous hunk in the diff'],
   ['g / shift+g', 'first / last hunk'],
+  ['v', 'unified / split view'],
   ['/', 'jump to the search field'],
   ['?', 'this list'],
 ]
-
-// The patch is rendered as hunks so the keyboard can jump between them: each
-// '@@' opens a hunk with an id the ScrollToHunk Command can focus.
-const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
-  let hunk = -1
-  return patch.split('\n').map(text => {
-    if (text.startsWith('@@')) hunk += 1
-    const isHunk = text.startsWith('@@')
-    const active = isHunk && hunk === activeHunk
-    return h.div(
-      isHunk
-        ? [
-            h.Attribute('id', `hunk-${hunk}`),
-            h.Attribute('tabindex', '-1'),
-            h.Class(
-              `whitespace-pre px-3 outline-none ${active ? 'bg-[#1d3350] text-[#c9e2ff]' : lineClass(text)}`,
-            ),
-          ]
-        : [h.Class(`whitespace-pre px-3 ${lineClass(text)}`)],
-      [text],
-    )
-  })
-}

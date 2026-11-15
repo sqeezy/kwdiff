@@ -63,6 +63,8 @@ export const Message = defineMessageUnion({
   JumpedHunk: { to: Schema.Literals(['top', 'bottom']) },
   ScrolledToHunk: { index: Schema.Number },
   ElementFocused: {},
+  DiffMounted: {},
+  ToggledDiffStyle: {},
 
 })
 export type Message = typeof Message.Type

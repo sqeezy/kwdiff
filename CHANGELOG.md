@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-15
+
+### Changed
+
+- The diff pane is Pierre's `CodeView` (@pierre/diffs): syntax colouring through
+  Shiki, line numbers, per-line virtualisation, file headers with change counts.
+- `v` toggles unified and split view.
+
+### Known
+
+- `dist` grows to ~12 MB of lazy Shiki language chunks; the window loads only
+  what it uses, but the installer carries them all. Trimming is a follow-up.
+
 ## [0.2.5] - 2026-11-15
 
 ### Added

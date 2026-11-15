@@ -30,6 +30,7 @@ const base: Model = {
   showKeymap: false,
   pane: 'search',
   hunkIndex: 0,
+  diffStyle: 'unified',
   branches: [],
   searching: false,
   searchId: 1,

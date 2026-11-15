@@ -1,11 +1,13 @@
 import { Effect, Schema } from 'effect'
-import { Command, Subscription, type Update } from 'foldkit'
+import { CodeView, parsePatchFiles } from '@pierre/diffs'
+import { Command, Mount, Subscription, type Update } from 'foldkit'
 import { focus, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
+import { hunkStartLines, scrollToLine, setViewer } from './viewer'
 import { Message } from './message'
 import type { Model } from './model'
 import type { FilePatch, RootOf } from './types'
@@ -162,14 +164,46 @@ export const FocusSelector = Command.define('FocusSelector', {
 })
 
 export const ScrollToHunk = Command.define('ScrollToHunk', {
-  args: { index: Schema.Number },
+  args: { index: Schema.Number, line: Schema.Number },
   messages: [Message.ScrolledToHunk],
-  execute: ({ index }) =>
-    focus(`#hunk-${index}`).pipe(
-      Effect.as(Message.ScrolledToHunk({ index })),
-      Effect.catch(() => Effect.succeed(Message.ScrolledToHunk({ index }))),
-    ),
+  execute: ({ index, line }) =>
+    Effect.sync(() => scrollToLine(line)).pipe(Effect.as(Message.ScrolledToHunk({ index }))),
 })
+
+// Pierre's CodeView owns its own shadow DOM, so it is mounted imperatively and
+// rebuilt whenever the patch or the layout changes.
+const MountDiff = Mount.define('MountDiff', {
+  args: {
+    patch: Schema.String,
+    style: Schema.Literals(['unified', 'split']),
+  },
+  messages: [Message.DiffMounted],
+  execute: ({ patch, style, element }) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const view = new CodeView({
+          diffStyle: style,
+          theme: 'github-dark',
+          overflow: 'scroll',
+          disableFileHeader: false,
+        })
+        view.setup(element as HTMLElement)
+        const files = parsePatchFiles(patch).flatMap(parsed => parsed.files)
+        view.setItems(
+          files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
+        )
+        setViewer(view)
+        return view
+      }),
+      view =>
+        Effect.sync(() => {
+          setViewer(null)
+          view.cleanUp()
+        }),
+    ).pipe(Effect.as(Message.DiffMounted())),
+})
+
+export { MountDiff }
 
 const BlurActive = Command.define('BlurActive', {
   messages: [Message.Blurred],
@@ -484,7 +518,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
         return {
           model: modifyFields(model, { hunkIndex: () => index }),
-          commands: [ScrollToHunk({ index })],
+          commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
         }
       }
       return { model }
@@ -513,7 +547,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
       return {
         model: modifyFields(model, { hunkIndex: () => index }),
-        commands: [ScrollToHunk({ index })],
+        commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
       }
     },
 
@@ -521,7 +555,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       const index = to === 'top' ? 0 : Math.max(0, hunkCount(model.patch) - 1)
       return {
         model: modifyFields(model, { hunkIndex: () => index }),
-        commands: [ScrollToHunk({ index })],
+        commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
       }
     },
 
@@ -555,6 +589,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     ScrolledToHunk: () => ({ model }),
     ElementFocused: () => ({ model }),
+    DiffMounted: () => ({ model }),
+
+    ToggledDiffStyle: () => ({
+      model: modifyFields(model, {
+        diffStyle: () => (model.diffStyle === 'unified' ? 'split' : 'unified'),
+      }),
+    }),
 
     ToggledKeymap: () => ({
       model: modifyFields(model, { showKeymap: () => !model.showKeymap }),
@@ -596,6 +637,7 @@ const emptyModel: Model = {
   showKeymap: false,
   pane: 'search',
   hunkIndex: 0,
+  diffStyle: 'unified',
   branches: [],
   searching: false,
   searchId: 0,
@@ -644,6 +686,7 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
         { keys: '?', whileTyping: 'Allow', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
+        { keys: 'v', mapEvent: () => Message.ToggledDiffStyle() },
       ],
     }),
   ),
