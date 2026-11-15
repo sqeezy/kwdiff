@@ -13,17 +13,29 @@ export const setViewer = (view: CodeView | null): void => {
 let hunks: ReadonlyArray<Readonly<{ id: string; line: number }>> = []
 let scroller: HTMLElement | null = null
 
-// Pierre paints into a shadow root, so the scroll container is not reachable
-// from our own DOM. Find it once per mount and keep it for j/k and the arrows.
-export const setScrollHost = (root: ShadowRoot | null): void => {
+// Pierre paints into a `diffs-container` element *inside* the host we hand it,
+// and that element is created asynchronously — so the scroll container is
+// searched for, retried, and cached.
+export const setScrollHost = (host: HTMLElement | null): void => {
   scroller = null
-  if (root === null) return
-  requestAnimationFrame(() => {
-    scroller =
-      [...root.querySelectorAll<HTMLElement>('*')].find(
+  if (host === null) return
+
+  const search = (attempt: number): void => {
+    const hosts = [host, ...host.querySelectorAll<HTMLElement>('*')]
+    const shadow = hosts.map(node => node.shadowRoot).find((root): root is ShadowRoot => root !== null)
+    if (shadow !== null && shadow !== undefined) {
+      const found = [...shadow.querySelectorAll<HTMLElement>('*')].find(
         element => element.scrollHeight > element.clientHeight + 4,
-      ) ?? null
-  })
+      )
+      if (found !== undefined) {
+        scroller = found
+        return
+      }
+    }
+    if (attempt < 30) requestAnimationFrame(() => search(attempt + 1))
+  }
+
+  requestAnimationFrame(() => search(0))
 }
 
 export const scrollByLines = (delta: number): void => {

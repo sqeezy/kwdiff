@@ -200,7 +200,7 @@ const MountDiff = Mount.define('MountDiff', {
           files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
         )
         setHunks(patch)
-        setScrollHost(element.shadowRoot)
+        setScrollHost(element as HTMLElement)
         setViewer(view)
         return view
       }),
