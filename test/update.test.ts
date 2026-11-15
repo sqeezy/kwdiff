@@ -1,7 +1,7 @@
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { DebouncedSearch, LoadPatch, LoadRefs, LoadSelection, update } from '../src/app'
+import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollToHunk, update } from '../src/app'
 import { Message } from '../src/message'
 import type { Model } from '../src/model'
 
@@ -28,6 +28,8 @@ const base: Model = {
   roots: [],
   lastError: null,
   showKeymap: false,
+  pane: 'search',
+  hunkIndex: 0,
   branches: [],
   searching: false,
   searchId: 1,
@@ -89,7 +91,7 @@ describe('selection', () => {
   test('space toggles the commit under the cursor', () => {
     story(
       update,
-      given({ ...base, cursor: 1 }),
+      given({ ...base, cursor: 1, pane: 'commits' }),
       message(Message.PressedSpace()),
       selectionResolved,
       model(m => {
@@ -343,6 +345,64 @@ describe('keymap', () => {
       model(m => {
         expect(m.showKeymap).toBe(false)
       }),
+    )
+  })
+})
+
+describe('pane navigation', () => {
+  const focusResolved = Command.resolve(FocusSelector, Message.ElementFocused())
+  const scrollResolved = Command.resolve(ScrollToHunk, Message.ScrolledToHunk({ index: 0 }))
+
+  test('tab walks search → commits → files → diff and stops at diff', () => {
+    story(
+      update,
+      given({ ...base, pane: 'search' }),
+      message(Message.Descended()),
+      focusResolved,
+      model(m => expect(m.pane).toBe('commits')),
+    )
+  })
+
+  test('shift+tab walks back to search and stays there', () => {
+    story(
+      update,
+      given({ ...base, pane: 'files' }),
+      message(Message.Ascended()),
+      focusResolved,
+      model(m => expect(m.pane).toBe('commits')),
+      message(Message.Ascended()),
+      focusResolved,
+      model(m => expect(m.pane).toBe('search')),
+    )
+  })
+
+  test('j moves the cursor only inside the commit list', () => {
+    story(
+      update,
+      given({ ...base, pane: 'search', cursor: 0 }),
+      message(Message.MovedInPane({ delta: 1 })),
+      model(m => expect(m.cursor).toBe(0)),
+      message(Message.FocusedPane({ pane: 'commits' })),
+      focusResolved,
+      message(Message.MovedInPane({ delta: 1 })),
+      model(m => expect(m.cursor).toBe(1)),
+    )
+  })
+
+  test('n moves between hunks and clamps at the last one', () => {
+    const patch = '@@ -1 +1 @@\n+a\n@@ -9 +9 @@\n+b'
+    story(
+      update,
+      given({ ...base, pane: 'diff', patch, hunkIndex: 0 }),
+      message(Message.MovedHunk({ delta: 1 })),
+      scrollResolved,
+      model(m => expect(m.hunkIndex).toBe(1)),
+      message(Message.MovedHunk({ delta: 1 })),
+      scrollResolved,
+      model(m => expect(m.hunkIndex).toBe(1)),
+      message(Message.JumpedHunk({ to: 'top' })),
+      scrollResolved,
+      model(m => expect(m.hunkIndex).toBe(0)),
     )
   })
 })

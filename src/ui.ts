@@ -150,7 +150,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
             ),
           ]),
           h.ul(
-            [h.Class('max-h-[34vh] overflow-auto py-1 lg:max-h-none')],
+            [
+              h.Attribute('id', 'commit-list'),
+              h.Attribute('tabindex', '0'),
+              h.Attribute('aria-label', 'Commits'),
+              h.Class(
+                `max-h-[34vh] overflow-auto py-1 outline-none lg:max-h-none ${
+                  model.pane === 'commits' ? 'ring-1 ring-inset ring-[#3fb950]/50' : ''
+                }`,
+              ),
+            ],
             [
               ...model.commits.map((commit, index) => {
                 const on = model.selectedShas.includes(commit.sha)
@@ -209,7 +218,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
             h.span([h.Class(`font-mono text-[10.5px] ${dim}`)], [`Files · ${model.files.length}`]),
           ]),
           h.ul(
-            [h.Class('max-h-[26vh] overflow-auto py-1 lg:max-h-none')],
+            [
+              h.Attribute('id', 'file-list'),
+              h.Attribute('tabindex', '0'),
+              h.Attribute('aria-label', 'Files'),
+              h.Class(
+                `max-h-[26vh] overflow-auto py-1 outline-none lg:max-h-none ${
+                  model.pane === 'files' ? 'ring-1 ring-inset ring-[#3fb950]/50' : ''
+                }`,
+              ),
+            ],
             model.files.map((file, index) =>
               h.li([], [
                 h.button(
@@ -279,9 +297,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                     'max-h-[46vh] overflow-auto py-1.5 font-mono text-[11.5px] leading-[1.6] outline-none focus-visible:ring-1 focus-visible:ring-[#3fb950] lg:max-h-none',
                   ),
                 ],
-                model.patch
-                  .split('\n')
-                  .map(text => h.div([h.Class(`whitespace-pre px-3 ${lineClass(text)}`)], [text])),
+                renderPatch(model.patch, model.hunkIndex, h),
               ),
         ]),
 
@@ -383,10 +399,36 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 const keymapRows: ReadonlyArray<readonly [string, string]> = [
-  ['/', 'focus the search field'],
-  ['j / k', 'move down / up the commit list'],
+  ['tab / shift+tab', 'next / previous pane: search, commits, files, diff'],
+  ['j / k  ·  ↓ / ↑', 'move inside the focused pane'],
   ['space', 'tick or untick the commit under the cursor'],
-  ['enter', 'focus the diff pane'],
-  ['esc', 'leave the field, close this list'],
+  ['enter', 'one pane deeper'],
+  ['esc', 'one pane back, close this list'],
+  ['n / p', 'next / previous hunk in the diff'],
+  ['g / shift+g', 'first / last hunk'],
+  ['/', 'jump to the search field'],
   ['?', 'this list'],
 ]
+
+// The patch is rendered as hunks so the keyboard can jump between them: each
+// '@@' opens a hunk with an id the ScrollToHunk Command can focus.
+const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  let hunk = -1
+  return patch.split('\n').map(text => {
+    if (text.startsWith('@@')) hunk += 1
+    const isHunk = text.startsWith('@@')
+    const active = isHunk && hunk === activeHunk
+    return h.div(
+      isHunk
+        ? [
+            h.Attribute('id', `hunk-${hunk}`),
+            h.Attribute('tabindex', '-1'),
+            h.Class(
+              `whitespace-pre px-3 outline-none ${active ? 'bg-[#1d3350] text-[#c9e2ff]' : lineClass(text)}`,
+            ),
+          ]
+        : [h.Class(`whitespace-pre px-3 ${lineClass(text)}`)],
+      [text],
+    )
+  })
+}

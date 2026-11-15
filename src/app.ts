@@ -151,20 +151,24 @@ export const LoadPatch = Command.define('LoadPatch', {
     ),
 })
 
-const FocusSearch = Command.define('FocusSearch', {
-  messages: [Message.SearchFocused],
-  execute: focus('#kw-search').pipe(
-    Effect.as(Message.SearchFocused()),
-    Effect.catch(() => Effect.succeed(Message.SearchFocused())),
-  ),
+export const FocusSelector = Command.define('FocusSelector', {
+  args: { selector: Schema.String },
+  messages: [Message.ElementFocused],
+  execute: ({ selector }) =>
+    focus(selector).pipe(
+      Effect.as(Message.ElementFocused()),
+      Effect.catch(() => Effect.succeed(Message.ElementFocused())),
+    ),
 })
 
-const FocusDiff = Command.define('FocusDiff', {
-  messages: [Message.DiffFocused],
-  execute: focus('#diff-pane').pipe(
-    Effect.as(Message.DiffFocused()),
-    Effect.catch(() => Effect.succeed(Message.DiffFocused())),
-  ),
+export const ScrollToHunk = Command.define('ScrollToHunk', {
+  args: { index: Schema.Number },
+  messages: [Message.ScrolledToHunk],
+  execute: ({ index }) =>
+    focus(`#hunk-${index}`).pipe(
+      Effect.as(Message.ScrolledToHunk({ index })),
+      Effect.catch(() => Effect.succeed(Message.ScrolledToHunk({ index }))),
+    ),
 })
 
 const BlurActive = Command.define('BlurActive', {
@@ -176,6 +180,20 @@ const BlurActive = Command.define('BlurActive', {
 })
 
 // ---- update ----------------------------------------------------------------
+
+const hunkCount = (patch: string | null): number =>
+  patch === null ? 0 : patch.split('\n').filter(line => line.startsWith('@@')).length
+
+const paneSelector = (pane: Model['pane']): string =>
+  pane === 'search'
+    ? '#kw-search'
+    : pane === 'commits'
+      ? '#commit-list'
+      : pane === 'files'
+        ? '#file-list'
+        : '#diff-pane'
+
+const focusPane = (pane: Model['pane']) => FocusSelector({ selector: paneSelector(pane) })
 
 const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => ({
   model: modifyFields(model, {
@@ -420,6 +438,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         : { model: modifyFields(model, { patch: () => patch, lastError: () => error }) },
 
     PressedSpace: () => {
+      if (model.pane !== 'commits') return { model }
       const commit = model.commits[model.cursor]
       if (commit === undefined) return { model }
       const selected = model.selectedShas.includes(commit.sha)
@@ -428,12 +447,114 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       return withSelection(model, selected)
     },
 
-    FocusedSearch: () => ({ model, commands: [FocusSearch()] }),
-    PressedEnter: () => ({ model, commands: [FocusDiff()] }),
+    FocusedSearch: () => ({
+      model: modifyFields(model, { pane: () => 'search' as const }),
+      commands: [focusPane('search')],
+    }),
+
+    FocusedPane: ({ pane }) => ({
+      model: modifyFields(model, { pane: () => pane }),
+      commands: [focusPane(pane)],
+    }),
+
+    MovedInPane: ({ delta }) => {
+      if (model.pane === 'commits') {
+        const last = Math.max(0, model.commits.length - 1)
+        const cursor = Math.min(last, Math.max(0, model.cursor + delta))
+        return { model: modifyFields(model, { cursor: () => cursor }) }
+      }
+      if (model.pane === 'files') {
+        const last = Math.max(0, model.files.length - 1)
+        const index = Math.min(last, Math.max(0, model.fileIndex + delta))
+        const file = model.files[index]
+        if (file === undefined) return { model }
+        const id = model.patchId + 1
+        return {
+          model: modifyFields(model, {
+            fileIndex: () => index,
+            patchId: () => id,
+            patch: () => null,
+            hunkIndex: () => 0,
+          }),
+          commands: [LoadPatch({ id, shas: [...model.selectedShas], path: file.path })],
+        }
+      }
+      if (model.pane === 'diff') {
+        const last = Math.max(0, hunkCount(model.patch) - 1)
+        const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
+        return {
+          model: modifyFields(model, { hunkIndex: () => index }),
+          commands: [ScrollToHunk({ index })],
+        }
+      }
+      return { model }
+    },
+
+    Descended: () => {
+      const next: Model['pane'] =
+        model.pane === 'search' ? 'commits' : model.pane === 'commits' ? 'files' : 'diff'
+      return {
+        model: modifyFields(model, { pane: () => next }),
+        commands: [focusPane(next)],
+      }
+    },
+
+    Ascended: () => {
+      const next: Model['pane'] =
+        model.pane === 'diff' ? 'files' : model.pane === 'files' ? 'commits' : 'search'
+      return {
+        model: modifyFields(model, { pane: () => next }),
+        commands: [focusPane(next)],
+      }
+    },
+
+    MovedHunk: ({ delta }) => {
+      const last = Math.max(0, hunkCount(model.patch) - 1)
+      const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
+      return {
+        model: modifyFields(model, { hunkIndex: () => index }),
+        commands: [ScrollToHunk({ index })],
+      }
+    },
+
+    JumpedHunk: ({ to }) => {
+      const index = to === 'top' ? 0 : Math.max(0, hunkCount(model.patch) - 1)
+      return {
+        model: modifyFields(model, { hunkIndex: () => index }),
+        commands: [ScrollToHunk({ index })],
+      }
+    },
+
+    PressedEnter: () => {
+      const next: Model['pane'] =
+        model.pane === 'search' ? 'commits' : model.pane === 'commits' ? 'files' : 'diff'
+      return {
+        model: modifyFields(model, { pane: () => next }),
+        commands: [focusPane(next)],
+      }
+    },
+
     PressedEscape: () =>
       model.showKeymap
         ? { model: modifyFields(model, { showKeymap: () => false }) }
-        : { model, commands: [BlurActive()] },
+        : model.pane === 'search'
+          ? { model, commands: [BlurActive()] }
+          : {
+              model: modifyFields(model, {
+                pane: () =>
+                  (model.pane === 'diff'
+                    ? 'files'
+                    : model.pane === 'files'
+                      ? 'commits'
+                      : 'search') as Model['pane'],
+              }),
+              commands: [
+                focusPane(model.pane === 'diff' ? 'files' : model.pane === 'files' ? 'commits' : 'search'),
+              ],
+            },
+
+    ScrolledToHunk: () => ({ model }),
+    ElementFocused: () => ({ model }),
 
     ToggledKeymap: () => ({
       model: modifyFields(model, { showKeymap: () => !model.showKeymap }),
@@ -473,6 +594,8 @@ const emptyModel: Model = {
   roots: [],
   lastError: null,
   showKeymap: false,
+  pane: 'search',
+  hunkIndex: 0,
   branches: [],
   searching: false,
   searchId: 0,
@@ -506,16 +629,21 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
     streamFromKeyBindings<Message>({
       bindings: [
         { keys: '/', whileTyping: 'Allow', mapEvent: () => Message.FocusedSearch() },
+        { keys: 'Tab', mapEvent: () => Message.Descended() },
+        { keys: 'Shift+Tab', mapEvent: () => Message.Ascended() },
         { keys: 'Enter', whileTyping: 'Allow', mapEvent: () => Message.PressedEnter() },
         { keys: 'Escape', whileTyping: 'Allow', mapEvent: () => Message.PressedEscape() },
-        { keys: '?', whileTyping: 'Allow', mapEvent: () => Message.ToggledKeymap() },
-        // ? needs Shift on every layout we care about, and the matcher compares
-        // shiftKey strictly: bind both spellings.
-        { keys: 'Shift+?', mapEvent: () => Message.ToggledKeymap() },
-        { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
-        { keys: 'j', mapEvent: () => Message.MovedCursor({ delta: 1 }) },
-        { keys: 'k', mapEvent: () => Message.MovedCursor({ delta: -1 }) },
+        { keys: 'ArrowDown', mapEvent: () => Message.MovedInPane({ delta: 1 }) },
+        { keys: 'ArrowUp', mapEvent: () => Message.MovedInPane({ delta: -1 }) },
+        { keys: 'j', mapEvent: () => Message.MovedInPane({ delta: 1 }) },
+        { keys: 'k', mapEvent: () => Message.MovedInPane({ delta: -1 }) },
+        { keys: 'n', mapEvent: () => Message.MovedHunk({ delta: 1 }) },
+        { keys: 'p', mapEvent: () => Message.MovedHunk({ delta: -1 }) },
+        { keys: 'g', mapEvent: () => Message.JumpedHunk({ to: 'top' }) },
+        { keys: 'Shift+G', mapEvent: () => Message.JumpedHunk({ to: 'bottom' }) },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
+        { keys: '?', whileTyping: 'Allow', mapEvent: () => Message.ToggledKeymap() },
+        { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
       ],
     }),
   ),

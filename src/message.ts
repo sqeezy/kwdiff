@@ -55,6 +55,14 @@ export const Message = defineMessageUnion({
   DiffFocused: {},
   Blurred: {},
   BlurRequested: {},
+  FocusedPane: { pane: Schema.Literals(['search', 'commits', 'files', 'diff']) },
+  MovedInPane: { delta: Schema.Number },
+  Descended: {},
+  Ascended: {},
+  MovedHunk: { delta: Schema.Number },
+  JumpedHunk: { to: Schema.Literals(['top', 'bottom']) },
+  ScrolledToHunk: { index: Schema.Number },
+  ElementFocused: {},
 
 })
 export type Message = typeof Message.Type
