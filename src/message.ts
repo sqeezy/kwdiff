@@ -54,6 +54,7 @@ export const Message = defineMessageUnion({
   SearchFocused: {},
   DiffFocused: {},
   Blurred: {},
+  BlurRequested: {},
 
 })
 export type Message = typeof Message.Type

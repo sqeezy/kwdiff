@@ -231,15 +231,17 @@ pub async fn search(
     branch: Option<String>,
 ) -> Result<Vec<Commit>, GitError> {
     crate::config::record_branch(&app, &repo, branch.as_deref());
+    let needle = keyword.trim().to_string();
     let mut args: Vec<String> = vec!["log".into()];
     match &branch {
         Some(branch) => args.push(branch.clone()),
         None => args.push("--all".into()),
     }
+    // An empty field is a full search: no --grep, everything on the ref.
+    if !needle.is_empty() {
+        args.extend(["-i".into(), "--grep".into(), needle.clone()]);
+    }
     args.extend([
-        "-i".into(),
-        "--grep".into(),
-        keyword.clone(),
         "--date=short".into(),
         "--format=%H%x09%ad%x09%an%x09%s".into(),
         "--max-count=2000".into(),
@@ -249,7 +251,7 @@ pub async fn search(
     let mut raw = run_tracked(&state, id, &repo, &args).await?;
 
     // -a is a union, not an intersection: messages and changed lines separately.
-    if code {
+    if code && !needle.is_empty() {
         let mut code_args: Vec<String> = vec!["log".into()];
         match &branch {
             Some(branch) => code_args.push(branch.clone()),

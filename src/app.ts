@@ -248,7 +248,19 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       }),
     }),
 
-    SucceededRefs: ({ refs }) => ({ model: modifyFields(model, { refs: () => [...refs] }) }),
+    SucceededRefs: ({ refs }) => {
+      const withRefs = modifyFields(model, { refs: () => [...refs] })
+      // Opening a repository is a full search: an empty field lists everything
+      // on the current ref, so the window is never a blank three-pane shell.
+      if (model.repo === null || model.keyword !== '') return { model: withRefs }
+      const id = model.searchId + 1
+      return {
+        model: modifyFields(withRefs, { searchId: () => id, searching: () => true }),
+        commands: [
+          DebouncedSearch({ id, keyword: '', code: model.code, branch: model.branch }),
+        ],
+      }
+    },
 
     ChangedKeyword: ({ value }) => {
       const id = model.searchId + 1
@@ -427,6 +439,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       model: modifyFields(model, { showKeymap: () => !model.showKeymap }),
     }),
 
+    // Clicking a pane is how you leave the search field; without this the field
+    // keeps focus and every single-key shortcut types into it instead.
+    BlurRequested: () => ({ model, commands: [BlurActive()] }),
+
     SearchFocused: () => ({ model }),
     DiffFocused: () => ({ model }),
     Blurred: () => ({ model }),
@@ -477,11 +493,11 @@ export const init = (): Update.Return<Model, Message> => {
         { name: 'release/4.2', kind: 'local' },
         { name: 'svn/legacy', kind: 'local' },
       ],
-      keyword: 'ABC-123',
+      keyword: '',
       searching: true,
       searchId: 1,
     },
-    commands: [DebouncedSearch({ id: 1, keyword: 'ABC-123', code: false, branch: null })],
+    commands: [DebouncedSearch({ id: 1, keyword: '', code: false, branch: null })],
   }
 }
 
@@ -492,7 +508,10 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: '/', whileTyping: 'Allow', mapEvent: () => Message.FocusedSearch() },
         { keys: 'Enter', whileTyping: 'Allow', mapEvent: () => Message.PressedEnter() },
         { keys: 'Escape', whileTyping: 'Allow', mapEvent: () => Message.PressedEscape() },
-        { keys: '?', mapEvent: () => Message.ToggledKeymap() },
+        { keys: '?', whileTyping: 'Allow', mapEvent: () => Message.ToggledKeymap() },
+        // ? needs Shift on every layout we care about, and the matcher compares
+        // shiftKey strictly: bind both spellings.
+        { keys: 'Shift+?', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'j', mapEvent: () => Message.MovedCursor({ delta: 1 }) },
         { keys: 'k', mapEvent: () => Message.MovedCursor({ delta: -1 }) },

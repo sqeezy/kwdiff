@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-15
+
+### Added
+
+- An empty search field is a full search: everything on the ref, newest first,
+  and opening a repository searches immediately so the window is never empty.
+
+### Fixed
+
+- `?` opens the keymap even while the search field has focus, which is how it
+  was dead before: single-key bindings are suppressed inside inputs.
+- Clicking a pane blurs the field, so `j`, `k` and `space` stop typing into the
+  search box after you have used it.
+
+
 ## [0.2.3] - 2026-11-15
 
 ### Added

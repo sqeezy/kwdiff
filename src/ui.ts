@@ -235,7 +235,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         ]),
 
         // diff
-        h.section([h.Class('flex min-h-0 flex-col')], [
+        h.section([h.Class('flex min-h-0 flex-col'), h.OnClick(Message.BlurRequested())], [
           h.div([h.Class(`flex items-center gap-2 border-b ${border} ${panel} px-3 py-1.5`)], [
             h.span([h.Class('truncate font-mono text-[11.5px] text-[#e6edf3]')], [
               model.files[model.fileIndex]?.path ?? 'no file',

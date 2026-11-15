@@ -250,7 +250,12 @@ export const mockGit: GitApi = {
   search: async ({ keyword, code, branch }: SearchArgs) => {
     await delay(220)
     const needle = keyword.trim().toLowerCase()
-    if (needle === '') return []
+    // An empty field is a full search, the way every git client behaves:
+    // everything on the ref, newest first.
+    if (needle === '') {
+      const all = fixtures.filter(f => branch === null || f.branches.includes(branch))
+      return [...all].sort(newestFirst).map(toCommit)
+    }
     const hits = fixtures.filter(f => {
       const inMessage = f.subject.toLowerCase().includes(needle)
       const inCode = code && f.files.some(file => file.patch.toLowerCase().includes(needle))
