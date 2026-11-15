@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-15
+
+### Added
+
+- Keyboard navigation across panes: `tab` / `shift+tab` walk search → commits →
+  files → diff; `enter` goes one deeper, `esc` one back; `j` / `k` or the
+  arrows move inside the focused pane; `n` / `p` step hunks, `g` / `shift+g`
+  jump to the first or last. The focused pane carries a ring, the focused hunk
+  a highlight.
+
 ## [0.2.4] - 2026-11-15
 
 ### Added
