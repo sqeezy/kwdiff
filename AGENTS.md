@@ -70,3 +70,16 @@ powershell -NoProfile -File scripts\bench.ps1 stop
 The bench uses its own port (1421) and its own app identifier
 (`dev.sqeezy.kwdiff.bench`), so a running personal app and a bench build never
 fight over a window, a port or a config file.
+
+### Driving the window in the VM
+
+ocu only sees the console session; SSH is elsewhere. `scripts/bench-ocu.ps1`
+runs one ocu call there through a scheduled task (`/IT`):
+
+```
+{ "tool": "snapshot", "args": { "app": "kwdiff" } }   → C:\Bench\ocu-request.json
+powershell -ExecutionPolicy Bypass -File scripts\bench-ocu.ps1
+```
+
+Result lands in `C:\Bench\ocu-result.txt`. Pass JSON as files, never as argv to
+`schtasks`.
