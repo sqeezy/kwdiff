@@ -2,14 +2,17 @@ param(
   [ValidateSet('setup', 'reset', 'dev', 'tauri', 'stop')]
   [string]$Action = 'setup',
   [string]$Path = (Join-Path $env:USERPROFILE 'Bench\kwdiff'),
-  [int])
+  [int]$Port = 1421
+)
 
 # kwdiff bench: a disposable checkout that never touches a personal clone.
-#   setup   clone into X:\Bench\kwdiff and install
+#   setup   clone into -Path and install
 #   reset   hard-reset to origin/main + fresh node_modules
-#   dev     Vite on port 1421 (browser, fixture data)
+#   dev     Vite on -Port (browser, fixture data)
 #   tauri   the real window, bench identifier and bench port
 #   stop    kill the bench dev server and any kwdiff window
+#
+# Fresh Windows blocks scripts: run with -ExecutionPolicy Bypass.
 $ErrorActionPreference = 'Stop'
 $Bench = $Path
 $Remote = 'https://github.com/sqeezy/kwdiff.git'
