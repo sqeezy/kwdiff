@@ -127,7 +127,24 @@ async function main() {
     )
     check('commit list is populated', rows > 0, `rows=${rows}`)
 
-    // 2. Keyboard: tab into the commits pane, space ticks the first commit.
+    // 2. Narrow to a commit whose patch is taller than the pane, so the
+    //    scrolling assertion below can mean something. "Pierre" matches the
+    //    commit that added the viewer; its patch is ~200 lines.
+    const search = await http(`/session/${sid}/element`, 'POST', {
+      using: 'css selector',
+      value: '#kw-search',
+    })
+    await http(`/session/${sid}/element/${search['element-6066-11e4-a52e-4f735466cecf']}/value`, 'POST', {
+      text: 'Pierre',
+    })
+    const filtered = await waitFor(
+      'return document.querySelectorAll("#commit-list li").length',
+      value => value === 1,
+    )
+    check('search narrows the list to one commit', filtered === 1, `rows=${filtered}`)
+
+    // Tab is suppressed while the field has focus, Escape leaves the field.
+    await press('Escape')
     await press('Tab')
     await press('Space')
     await sleep(400)
@@ -159,6 +176,12 @@ async function main() {
       return count;
     `)
     check('no nested scroller inside the diff pane', nested === 0, `nested=${nested}`)
+
+    const overflow = await exec(`
+      const pane = document.getElementById("diff-pane");
+      return pane ? pane.scrollHeight > pane.clientHeight + 20 : false;
+    `)
+    check('the chosen patch overflows its pane', overflow === true, `overflow=${overflow}`)
 
     await press('Tab')
     await press('Tab')
