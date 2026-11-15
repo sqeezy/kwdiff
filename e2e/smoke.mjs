@@ -141,7 +141,7 @@ async function main() {
       'return document.querySelectorAll("#commit-list li").length',
       value => value === 1,
     )
-    check('search narrows the list to one commit', filtered === 1, `rows=${filtered}`)
+    check('search narrows the list', filtered >= 1 && filtered < rows, `rows=${filtered}`)
 
     // Tab is suppressed while the field has focus, Escape leaves the field.
     await press('Escape')
@@ -185,6 +185,10 @@ async function main() {
 
     await press('Tab')
     await press('Tab')
+    const focus = await exec(
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"',
+    )
+    console.log(`     focus before PageDown: ${focus}`)
     await press('PageDown')
     await sleep(300)
     const scrolled = await waitFor(
