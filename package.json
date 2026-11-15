@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "oxlint src",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "e2e": "node e2e/smoke.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
