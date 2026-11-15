@@ -1,7 +1,8 @@
 param(
   [ValidateSet('setup', 'reset', 'dev', 'tauri', 'stop')]
-  [string]$Action = 'setup'
-)
+  [string]$Action = 'setup',
+  [string]$Path = (Join-Path $env:USERPROFILE 'Bench\kwdiff'),
+  [int])
 
 # kwdiff bench: a disposable checkout that never touches a personal clone.
 #   setup   clone into X:\Bench\kwdiff and install
@@ -10,9 +11,8 @@ param(
 #   tauri   the real window, bench identifier and bench port
 #   stop    kill the bench dev server and any kwdiff window
 $ErrorActionPreference = 'Stop'
-$Bench = 'X:\Bench\kwdiff'
+$Bench = $Path
 $Remote = 'https://github.com/sqeezy/kwdiff.git'
-$Port = 1421
 
 function Stop-Port([int]$Port) {
   $owner = (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).OwningProcess
