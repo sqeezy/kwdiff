@@ -493,6 +493,7 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'Enter', whileTyping: 'Allow', mapEvent: () => Message.PressedEnter() },
         { keys: 'Escape', whileTyping: 'Allow', mapEvent: () => Message.PressedEscape() },
         { keys: '?', mapEvent: () => Message.ToggledKeymap() },
+        { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'j', mapEvent: () => Message.MovedCursor({ delta: 1 }) },
         { keys: 'k', mapEvent: () => Message.MovedCursor({ delta: -1 }) },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },

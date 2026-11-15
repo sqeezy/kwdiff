@@ -107,6 +107,17 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           ],
           ['-a code'],
         ),
+        h.button(
+          [
+            h.OnClick(Message.ToggledKeymap()),
+            h.Attribute('aria-label', 'Keyboard shortcuts'),
+            h.Attribute('title', 'Keyboard shortcuts (?)'),
+            h.Class(
+              'rounded border border-[#2b3543] px-1.5 py-1 font-mono text-[11px] text-[#7d8b9e] hover:border-[#3fb950] hover:text-[#3fb950]',
+            ),
+          ],
+          ['?'],
+        ),
         h.span([h.Class('font-mono text-[11px] text-[#7d8b9e]')], [
           `${selected.length}/${model.commits.length}`,
         ]),
@@ -334,7 +345,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.span([h.Class('text-[#f85149]')], [`−${removed}`]),
         ]),
         h.span([h.Class('text-[#2b3543]')], ['|']),
-        h.span([], ['effect 4.1.4 · foldkit 0.170']),
+        h.span([], [`kwdiff ${__APP_VERSION__} · effect 4.1.4 · foldkit 0.170`]),
       ],
     ),
 

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-15
+
+### Added
+
+- A visible `?` button in the toolbar and an `F1` binding open the keymap, so
+  it no longer depends on a keyboard layout or on which build is installed.
+- The status bar shows the app version, so a report can name its build.
+
+
 ## [0.2.2] - 2026-11-15
 
 ### Fixed
