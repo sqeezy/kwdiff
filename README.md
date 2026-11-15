@@ -13,15 +13,19 @@ parent, so no merge base is needed anywhere.
 ## Why
 
 ```
-git diff A B          fine
-git log --all -p      fine
-git diff A..B         needs a common ancestor
-git range-diff A..B   needs a merge base
+git diff A B        two endpoints, no ancestry needed (A..B is the same thing)
+git diff A...B      three-dot: needs a merge base
+git log --all -p    every ref, as N separate patches
+git log A..B        the set you wanted — on unrelated roots it quietly means
+                    "all of B", which is why the wrong answer is invisible
 ```
 
-Most clients only offer the range, so they refuse the case this tool exists
-for: unrelated imports, vendored histories, orphan branches. kwdiff uses the
-two primitives that never need ancestry and puts a window around them.
+No client offers the **set**: two endpoints, or a range, or a PR. Unrelated
+imports, vendored histories and orphan branches are exactly where a range has
+no meaning, so kwdiff composes the patches per commit instead — each is
+diffed against its own parent, which needs nothing from the graph.
+
+The competitive picture, with sources: [docs/research/competitive-landscape.md](docs/research/competitive-landscape.md).
 
 ## Run it
 
