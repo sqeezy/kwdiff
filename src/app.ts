@@ -1,13 +1,11 @@
 import { Effect, Option, Schema } from 'effect'
-import { CodeView, parsePatchFiles } from '@pierre/diffs'
-import { Command, Mount, Subscription, type Update } from 'foldkit'
+import { Command, Subscription, type Update } from 'foldkit'
 import { focus, streamFromEventFilterMap, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
-import { scrollByLines, scrollToHunk, setHunks, setViewer } from './viewer'
 import { Message } from './message'
 import type { Model } from './model'
 import type { FilePatch, RootOf } from './types'
@@ -163,55 +161,16 @@ export const FocusSelector = Command.define('FocusSelector', {
     ),
 })
 
-export const ScrollDiff = Command.define('ScrollDiff', {
-  args: { delta: Schema.Number },
-  messages: [Message.ScrolledDiff],
-  execute: ({ delta }) =>
-    Effect.sync(() => scrollByLines(delta * 3)).pipe(Effect.as(Message.ScrolledDiff())),
-})
-
-export const ScrollToHunk = Command.define('ScrollToHunk', {
+export // Hunk scrolling talks to the rendered hunk anchors in our own pre.
+const ScrollToHunk = Command.define('ScrollToHunk', {
   args: { index: Schema.Number },
   messages: [Message.ScrolledToHunk],
   execute: ({ index }) =>
-    Effect.sync(() => scrollToHunk(index)).pipe(Effect.as(Message.ScrolledToHunk({ index }))),
+    focus(`#hunk-${index}`).pipe(
+      Effect.as(Message.ScrolledToHunk({ index })),
+      Effect.catch(() => Effect.succeed(Message.ScrolledToHunk({ index }))),
+    ),
 })
-
-// Pierre's CodeView owns its own shadow DOM, so it is mounted imperatively and
-// rebuilt whenever the patch or the layout changes.
-const MountDiff = Mount.define('MountDiff', {
-  args: {
-    patch: Schema.String,
-    style: Schema.Literals(['unified', 'split']),
-  },
-  messages: [Message.DiffMounted],
-  execute: ({ patch, style, element }) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const view = new CodeView({
-          diffStyle: style,
-          theme: 'github-dark',
-          overflow: 'scroll',
-          disableFileHeader: false,
-        })
-        view.setup(element as HTMLElement)
-        const files = parsePatchFiles(patch).flatMap(parsed => parsed.files)
-        view.setItems(
-          files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
-        )
-        setHunks(patch)
-        setViewer(view)
-        return view
-      }),
-      view =>
-        Effect.sync(() => {
-          setViewer(null)
-          view.cleanUp()
-        }),
-    ).pipe(Effect.as(Message.DiffMounted())),
-})
-
-export { MountDiff }
 
 const BlurActive = Command.define('BlurActive', {
   messages: [Message.Blurred],
@@ -534,8 +493,12 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         }
       }
       if (model.pane === 'diff') {
-        // Inside the diff the arrows and j/k scroll lines; hunks are n/p.
-        return { model, commands: [ScrollDiff({ delta })] }
+        const last = Math.max(0, hunkCount(model.patch) - 1)
+        const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
+        return {
+          model: modifyFields(model, { hunkIndex: () => index }),
+          commands: [ScrollToHunk({ index })],
+        }
       }
       return { model }
     },

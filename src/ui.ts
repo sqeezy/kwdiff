@@ -1,6 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
-import { MountDiff } from './app'
 import { Message } from './message'
 import type { Model } from './model'
 
@@ -290,23 +289,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                   ? 'Tick a commit to see its patch.'
                   : 'Loading patch…',
               ])
-            : h.div(
+            : h.pre(
                 [
                   h.Attribute('id', 'diff-pane'),
                   h.Attribute('tabindex', '0'),
                   h.Attribute('aria-label', 'Diff'),
-                  h.Class('min-h-0 flex-1 overflow-auto outline-none'),
-                ],
-                [
-                  h.keyed('div')(
-                    `${model.patchId}:${model.diffStyle}`,
-                    [
-                      h.Class('h-full min-h-[240px]'),
-                      h.OnMount(MountDiff({ patch: model.patch, style: model.diffStyle })),
-                    ],
-                    [],
+                  h.Class(
+                    'min-h-0 flex-1 overflow-auto py-1.5 font-mono text-[11.5px] leading-[1.6] outline-none focus-visible:ring-1 focus-visible:ring-[#3fb950]',
                   ),
                 ],
+                renderPatch(model.patch, model.hunkIndex, h),
               ),
         ]),
 
@@ -405,6 +397,29 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         )
       : h.span([]),
   ])
+}
+
+// The patch is rendered as hunks so the keyboard can jump between them: each
+// '@@' opens a hunk with an id the scroll command focuses.
+const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  let hunk = -1
+  return patch.split('\n').map(text => {
+    if (text.startsWith('@@')) hunk += 1
+    const isHunk = text.startsWith('@@')
+    const active = isHunk && hunk === activeHunk
+    return h.div(
+      isHunk
+        ? [
+            h.Attribute('id', `hunk-${hunk}`),
+            h.Attribute('tabindex', '-1'),
+            h.Class(
+              `whitespace-pre px-3 outline-none ${active ? 'bg-[#1d3350] text-[#c9e2ff]' : lineClass(text)}`,
+            ),
+          ]
+        : [h.Class(`whitespace-pre px-3 ${lineClass(text)}`)],
+      [text],
+    )
+  })
 }
 
 const keymapRows: ReadonlyArray<readonly [string, string]> = [
