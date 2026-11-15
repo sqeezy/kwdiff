@@ -54,3 +54,19 @@ the depth, not the repository, and every "why is history missing" report becomes
 a false alarm. `git rev-parse --is-shallow-repository` answers it; `git fetch
 --unshallow https://github.com/sqeezy/kwdiff.git '+refs/heads/*:refs/remotes/origin/*'`
 fixes it. Prefer HTTPS on the bench: its `origin` (an SSH alias) may have no key.
+
+## Where to test
+
+Never build, pull or `npm ci` in the owner's own checkout (`X:\Github\kwdiff`).
+The bench is `X:\Bench\kwdiff`, driven by `scripts/bench.ps1`:
+
+```
+powershell -NoProfile -File scripts\bench.ps1 reset    # origin/main + fresh deps
+powershell -NoProfile -File scripts\bench.ps1 dev      # Vite on 1421, fixture data
+powershell -NoProfile -File scripts\bench.ps1 tauri    # real window, bench config
+powershell -NoProfile -File scripts\bench.ps1 stop
+```
+
+The bench uses its own port (1421) and its own app identifier
+(`dev.sqeezy.kwdiff.bench`), so a running personal app and a bench build never
+fight over a window, a port or a config file.
