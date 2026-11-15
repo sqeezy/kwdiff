@@ -48,6 +48,21 @@ jobs:
       - run: npm test
       - name: build installer
         run: npm run tauri build
+
+      # The e2e drives the real window, so it needs a desktop session: GitHub's
+      # Windows runners have one, but a headless agent does not. Non-blocking
+      # until it has proven itself on this runner a few times.
+      - name: e2e smoke (window, keyboard, scroll)
+        continue-on-error: true
+        shell: bash
+        run: |
+          cargo install tauri-driver --locked
+          WEBVIEW=$(powershell -NoProfile -Command "(Get-Item 'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe' | Select-Object -First 1).VersionInfo.ProductVersion")
+          curl -sSL -o ed.zip "https://msedgedriver.microsoft.com/${WEBVIEW}/edgedriver_win64.zip"
+          unzip -o -q ed.zip
+          export MSEDGEDRIVER="$(pwd)\msedgedriver.exe"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          npm run e2e
       - uses: actions/upload-artifact@v4
         with:
           name: kwdiff-windows
