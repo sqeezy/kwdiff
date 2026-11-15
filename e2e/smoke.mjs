@@ -90,6 +90,19 @@ async function main() {
     const sid = session.sessionId
     const exec = script => http(`/session/${sid}/execute/sync`, 'POST', { script, args: [] })
 
+    // The window opens, reads its config, spawns git and debounces a search:
+    // assertions have to wait for state instead of assuming it.
+    const waitFor = async (script, ok, timeoutMs = 20000) => {
+      const deadline = Date.now() + timeoutMs
+      let value
+      while (Date.now() < deadline) {
+        value = await exec(script)
+        if (ok(value)) return value
+        await sleep(300)
+      }
+      return value
+    }
+
     const press = async key => {
       const value = KEYS[key] ?? key
       await http(`/session/${sid}/actions`, 'POST', {
@@ -108,8 +121,9 @@ async function main() {
 
     // 1. The window opened and the commit list is populated (config points at
     //    the bench repository, so the app opens it on launch).
-    const rows = await exec(
+    const rows = await waitFor(
       'return document.querySelectorAll("#commit-list li").length',
+      value => value > 0,
     )
     check('commit list is populated', rows > 0, `rows=${rows}`)
 
@@ -117,14 +131,16 @@ async function main() {
     await press('Tab')
     await press('Space')
     await sleep(400)
-    const ticked = await exec(
+    const ticked = await waitFor(
       'return document.querySelectorAll("[role=checkbox][aria-checked=true]").length',
+      value => value >= 1,
     )
     check('space ticks a commit', ticked >= 1, `ticked=${ticked}`)
 
     // 3. The patch reached the pane.
-    const patchLength = await exec(
+    const patchLength = await waitFor(
       'return (document.getElementById("diff-pane")?.textContent ?? "").length',
+      value => value > 40,
     )
     check('patch rendered', patchLength > 40, `chars=${patchLength}`)
 
@@ -148,8 +164,10 @@ async function main() {
     await press('Tab')
     await press('PageDown')
     await sleep(300)
-    const scrolled = await exec(
+    const scrolled = await waitFor(
       'return document.getElementById("diff-pane")?.scrollTop ?? -1',
+      value => value > 0,
+      5000,
     )
     check('PageDown scrolls the patch', scrolled > 0, `scrollTop=${scrolled}`)
 
@@ -158,8 +176,10 @@ async function main() {
     await press('Escape')
     await press('?')
     await sleep(300)
-    const keymap = await exec(
+    const keymap = await waitFor(
       'return document.querySelector("[role=dialog][aria-label=\\"Keyboard shortcuts\\"]") !== null',
+      value => value === true,
+      5000,
     )
     check('? opens the keymap', keymap === true)
 
