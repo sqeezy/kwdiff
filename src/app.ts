@@ -7,7 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
-import { scrollToHunk, setHunks, setViewer } from './viewer'
+import { scrollByLines, scrollToHunk, setHunks, setScrollHost, setViewer } from './viewer'
 import { Message } from './message'
 import type { Model } from './model'
 import type { FilePatch, RootOf } from './types'
@@ -163,6 +163,13 @@ export const FocusSelector = Command.define('FocusSelector', {
     ),
 })
 
+export const ScrollDiff = Command.define('ScrollDiff', {
+  args: { delta: Schema.Number },
+  messages: [Message.ScrolledDiff],
+  execute: ({ delta }) =>
+    Effect.sync(() => scrollByLines(delta * 3)).pipe(Effect.as(Message.ScrolledDiff())),
+})
+
 export const ScrollToHunk = Command.define('ScrollToHunk', {
   args: { index: Schema.Number },
   messages: [Message.ScrolledToHunk],
@@ -193,6 +200,7 @@ const MountDiff = Mount.define('MountDiff', {
           files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
         )
         setHunks(patch)
+        setScrollHost(element.shadowRoot)
         setViewer(view)
         return view
       }),
@@ -527,12 +535,8 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         }
       }
       if (model.pane === 'diff') {
-        const last = Math.max(0, hunkCount(model.patch) - 1)
-        const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
-        return {
-          model: modifyFields(model, { hunkIndex: () => index }),
-          commands: [ScrollToHunk({ index })],
-        }
+        // Inside the diff the arrows and j/k scroll lines; hunks are n/p.
+        return { model, commands: [ScrollDiff({ delta })] }
       }
       return { model }
     },
@@ -601,6 +605,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
             },
 
     ScrolledToHunk: () => ({ model }),
+    ScrolledDiff: () => ({ model }),
     ElementFocused: () => ({ model }),
     DiffMounted: () => ({ model }),
 

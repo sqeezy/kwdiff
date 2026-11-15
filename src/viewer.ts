@@ -11,6 +11,24 @@ export const setViewer = (view: CodeView | null): void => {
 }
 
 let hunks: ReadonlyArray<Readonly<{ id: string; line: number }>> = []
+let scroller: HTMLElement | null = null
+
+// Pierre paints into a shadow root, so the scroll container is not reachable
+// from our own DOM. Find it once per mount and keep it for j/k and the arrows.
+export const setScrollHost = (root: ShadowRoot | null): void => {
+  scroller = null
+  if (root === null) return
+  requestAnimationFrame(() => {
+    scroller =
+      [...root.querySelectorAll<HTMLElement>('*')].find(
+        element => element.scrollHeight > element.clientHeight + 4,
+      ) ?? null
+  })
+}
+
+export const scrollByLines = (delta: number): void => {
+  scroller?.scrollBy({ top: delta * 20, behavior: 'instant' })
+}
 
 // Each hunk belongs to a file item (`f0`, `f1`, …) and an added-side line.
 // Scroll targets need both; a bare line number means nothing to the viewer.

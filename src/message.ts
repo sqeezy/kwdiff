@@ -62,6 +62,7 @@ export const Message = defineMessageUnion({
   MovedHunk: { delta: Schema.Number },
   JumpedHunk: { to: Schema.Literals(['top', 'bottom']) },
   ScrolledToHunk: { index: Schema.Number },
+  ScrolledDiff: {},
   ElementFocused: {},
   DiffMounted: {},
   ToggledDiffStyle: {},
