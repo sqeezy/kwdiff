@@ -16,12 +16,14 @@ $ErrorActionPreference = 'Stop'
 $ocu = Join-Path $env:USERPROFILE '.pi\mobile\tools\ocu\1.1.2-pp.3\ocu.exe'
 if (-not (Test-Path $ocu)) { throw "ocu not found at $ocu" }
 
-$request = Get-Content -Raw -Path $Request | ConvertFrom-Json
-$tool = $request.tool
+# NB: the parameter is [string]$Request, so the parsed object needs its own
+# name — assigning to $request would stringify it through the type constraint.
+$req = Get-Content -Raw -Path $Request | ConvertFrom-Json
+$tool = $req.tool
 if (-not $tool) { throw "request file has no 'tool'" }
 
-$argsJson = if ($null -ne $request.args) {
-  $request.args | ConvertTo-Json -Depth 12 -Compress
+$argsJson = if ($null -ne $req.args) {
+  $req.args | ConvertTo-Json -Depth 12 -Compress
 } else {
   '{}'
 }
