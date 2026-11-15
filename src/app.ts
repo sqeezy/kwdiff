@@ -116,19 +116,27 @@ export const LoadSelection = Command.define('LoadSelection', {
     Effect.gen(function* () {
       const files = yield* Effect.tryPromise({
         try: () => gitApi.files(shas),
-        catch: () => [] as ReadonlyArray<FilePatch>,
-      }).pipe(Effect.catch(() => Effect.succeed([] as ReadonlyArray<FilePatch>)))
-
+        catch: error => String(error),
+      })
       const roots = yield* Effect.tryPromise({
         try: () => gitApi.roots(shas),
-        catch: () => [] as ReadonlyArray<RootOf>,
-      }).pipe(Effect.catch(() => Effect.succeed([] as ReadonlyArray<RootOf>)))
+        catch: error => String(error),
+      })
 
       return Message.SucceededSelection({
         files: [...files],
         roots: [...new Set(roots.map(root => root.root))],
+        error: null,
       })
-    }),
+    }).pipe(
+      // A failure must reach the pane: an empty list and no explanation is the
+      // worst outcome, and it is how the diff pane went blank for a whole day.
+      Effect.catch(error =>
+        Effect.succeed(
+          Message.SucceededSelection({ files: [], roots: [], error: String(error) }),
+        ),
+      ),
+    ),
 })
 
 export const LoadPatch = Command.define('LoadPatch', {
@@ -136,8 +144,10 @@ export const LoadPatch = Command.define('LoadPatch', {
   messages: [Message.SucceededPatch],
   execute: ({ id, shas, path }) =>
     Effect.tryPromise({ try: () => gitApi.patch(shas, path), catch: error => String(error) }).pipe(
-      Effect.map(patch => Message.SucceededPatch({ id, patch })),
-      Effect.catch(() => Effect.succeed(Message.SucceededPatch({ id, patch: '' }))),
+      Effect.map(patch => Message.SucceededPatch({ id, patch, error: null })),
+      Effect.catch(error =>
+        Effect.succeed(Message.SucceededPatch({ id, patch: '', error: String(error) })),
+      ),
     ),
 })
 
@@ -171,6 +181,7 @@ const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => ({
   model: modifyFields(model, {
     selectedShas: () => [...selectedShas],
     patch: () => null,
+    lastError: () => null,
     patchId: id => id + 1,
   }),
   commands: [LoadSelection({ shas: [...selectedShas] })],
@@ -353,7 +364,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       }
     },
 
-    SucceededSelection: ({ files, roots }) => {
+    SucceededSelection: ({ files, roots, error }) => {
       const list = [...files]
       const rootList = [...new Set(roots)]
       if (list.length === 0) {
@@ -363,13 +374,20 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
             roots: () => rootList,
             patch: () => null,
             fileIndex: () => 0,
+            lastError: () => error,
           }),
         }
       }
       const index = Math.min(model.fileIndex, list.length - 1)
       const file = list[index]
       if (file === undefined) {
-        return { model: modifyFields(model, { files: () => list, roots: () => rootList }) }
+        return {
+          model: modifyFields(model, {
+            files: () => list,
+            roots: () => rootList,
+            lastError: () => error,
+          }),
+        }
       }
       const id = model.patchId + 1
       return {
@@ -378,13 +396,16 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
           roots: () => rootList,
           fileIndex: () => index,
           patchId: () => id,
+          lastError: () => error,
         }),
         commands: [LoadPatch({ id, shas: [...model.selectedShas], path: file.path })],
       }
     },
 
-    SucceededPatch: ({ id, patch }) =>
-      id !== model.patchId ? { model } : { model: modifyFields(model, { patch: () => patch }) },
+    SucceededPatch: ({ id, patch, error }) =>
+      id !== model.patchId
+        ? { model }
+        : { model: modifyFields(model, { patch: () => patch, lastError: () => error }) },
 
     PressedSpace: () => {
       const commit = model.commits[model.cursor]
@@ -397,7 +418,14 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     FocusedSearch: () => ({ model, commands: [FocusSearch()] }),
     PressedEnter: () => ({ model, commands: [FocusDiff()] }),
-    PressedEscape: () => ({ model, commands: [BlurActive()] }),
+    PressedEscape: () =>
+      model.showKeymap
+        ? { model: modifyFields(model, { showKeymap: () => false }) }
+        : { model, commands: [BlurActive()] },
+
+    ToggledKeymap: () => ({
+      model: modifyFields(model, { showKeymap: () => !model.showKeymap }),
+    }),
 
     SearchFocused: () => ({ model }),
     DiffFocused: () => ({ model }),
@@ -427,6 +455,8 @@ const emptyModel: Model = {
   fileIndex: 0,
   patch: null,
   roots: [],
+  lastError: null,
+  showKeymap: false,
   branches: [],
   searching: false,
   searchId: 0,
@@ -462,6 +492,7 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: '/', whileTyping: 'Allow', mapEvent: () => Message.FocusedSearch() },
         { keys: 'Enter', whileTyping: 'Allow', mapEvent: () => Message.PressedEnter() },
         { keys: 'Escape', whileTyping: 'Allow', mapEvent: () => Message.PressedEscape() },
+        { keys: '?', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'j', mapEvent: () => Message.MovedCursor({ delta: 1 }) },
         { keys: 'k', mapEvent: () => Message.MovedCursor({ delta: -1 }) },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },

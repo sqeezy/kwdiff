@@ -26,6 +26,8 @@ const base: Model = {
   fileIndex: 0,
   patch: null,
   roots: [],
+  lastError: null,
+  showKeymap: false,
   branches: [],
   searching: false,
   searchId: 1,
@@ -37,7 +39,7 @@ const base: Model = {
 // empty answer ends the cascade.
 const selectionResolved = Command.resolve(
   LoadSelection,
-  Message.SucceededSelection({ files: [], roots: [] }),
+  Message.SucceededSelection({ files: [], roots: [], error: null }),
 )
 
 // The debounce is resolved with a stale id, so update drops it and asks for
@@ -184,7 +186,7 @@ describe('files and roots', () => {
     story(
       update,
       given({ ...base, files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false }], patch: 'x' }),
-      message(Message.SucceededSelection({ files: [], roots: [] })),
+      message(Message.SucceededSelection({ files: [], roots: [], error: null })),
       model(m => {
         expect(m.files).toEqual([])
         expect(m.patch).toBeNull()
@@ -200,8 +202,8 @@ describe('files and roots', () => {
     story(
       update,
       given({ ...base, fileIndex: 3, patchId: 7, files }),
-      message(Message.SucceededSelection({ files, roots: [] })),
-      Command.resolve(LoadPatch, Message.SucceededPatch({ id: 8, patch: '' })),
+      message(Message.SucceededSelection({ files, roots: [], error: null })),
+      Command.resolve(LoadPatch, Message.SucceededPatch({ id: 8, patch: '', error: null })),
       model(m => {
         expect(m.fileIndex).toBe(1)
         expect(m.patchId).toBe(8)
@@ -213,7 +215,7 @@ describe('files and roots', () => {
     story(
       update,
       given(base),
-      message(Message.SucceededSelection({ files: [], roots: ['root-1', 'root-2', 'root-1'] })),
+      message(Message.SucceededSelection({ files: [], roots: ['root-1', 'root-2', 'root-1'], error: null })),
       model(m => {
         expect(m.roots).toEqual(['root-1', 'root-2'])
       }),
@@ -224,7 +226,7 @@ describe('files and roots', () => {
     story(
       update,
       given(base),
-      message(Message.SucceededSelection({ files: [], roots: ['root-1'] })),
+      message(Message.SucceededSelection({ files: [], roots: ['root-1'], error: null })),
       model(m => {
         expect(m.roots.length).toBe(1)
       }),
@@ -272,6 +274,74 @@ describe('recents', () => {
       model(m => {
         expect(m.recents.length).toBe(10)
         expect(m.recents[0]?.root).toBe('C:\\work\\new')
+      }),
+    )
+  })
+})
+
+describe('failures are visible', () => {
+  test('a failed file load carries git’s message into the pane', () => {
+    story(
+      update,
+      given(base),
+      message(
+        Message.SucceededSelection({ files: [], roots: [], error: 'fatal: not a git repository' }),
+      ),
+      model(m => {
+        expect(m.lastError).toBe('fatal: not a git repository')
+        expect(m.files).toEqual([])
+      }),
+    )
+  })
+
+  test('a successful load clears the message', () => {
+    story(
+      update,
+      given({ ...base, lastError: 'old' }),
+      message(Message.SucceededSelection({ files: [], roots: [], error: null })),
+      model(m => {
+        expect(m.lastError).toBeNull()
+      }),
+    )
+  })
+
+  test('a failed patch keeps the text and shows why', () => {
+    story(
+      update,
+      given({ ...base, patchId: 3 }),
+      message(
+        Message.SucceededPatch({ id: 3, patch: '', error: 'exit status 128' }),
+      ),
+      model(m => {
+        expect(m.lastError).toBe('exit status 128')
+      }),
+    )
+  })
+})
+
+describe('keymap', () => {
+  test('? opens it and ? closes it', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledKeymap()),
+      model(m => {
+        expect(m.showKeymap).toBe(true)
+      }),
+      message(Message.ToggledKeymap()),
+      model(m => {
+        expect(m.showKeymap).toBe(false)
+      }),
+    )
+  })
+
+  test('escape closes it without reaching for the DOM', () => {
+    story(
+      update,
+      given({ ...base, showKeymap: true }),
+      message(Message.PressedEscape()),
+      model(m => {
+        expect(m.showKeymap).toBe(false)
       }),
     )
   })

@@ -230,6 +230,17 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
               model.files[model.fileIndex]?.path ?? 'no file',
             ]),
           ]),
+          model.lastError === null
+            ? h.span([])
+            : h.p(
+                [
+                  h.Attribute('role', 'alert'),
+                  h.Class(
+                    'whitespace-pre-wrap border-b border-[#2b3543] bg-[#2d1417] px-3 py-2 font-mono text-[11px] text-[#f0a19b]',
+                  ),
+                ],
+                [`git: ${model.lastError}`],
+              ),
           model.roots.length > 1
             ? h.div(
                 [h.Class(`flex items-center gap-2 border-b ${border} bg-[#131720] px-3 py-1`)],
@@ -326,5 +337,45 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         h.span([], ['effect 4.1.4 · foldkit 0.170']),
       ],
     ),
+
+    // ---- keymap ----------------------------------------------------------
+    model.showKeymap
+      ? h.div(
+          [
+            h.Attribute('role', 'dialog'),
+            h.Attribute('aria-label', 'Keyboard shortcuts'),
+            h.OnClick(Message.ToggledKeymap()),
+            h.Class(
+              'fixed inset-0 z-50 grid place-items-center bg-[#05070a]/80 p-4 backdrop-blur-sm',
+            ),
+          ],
+          [
+            h.div(
+              [h.Class('w-full max-w-sm rounded-xl border border-[#2b3543] bg-[#11151d] p-4 shadow-2xl')],
+              [
+                h.div([h.Class('flex items-baseline justify-between')], [
+                  h.span([h.Class('text-[13px] font-semibold text-[#e6edf3]')], ['Keyboard']),
+                  h.span([h.Class(`font-mono text-[10.5px] ${quiet}`)], ['esc or ? to close']),
+                ]),
+                h.dl([h.Class('mt-3 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2')], [
+                  ...keymapRows.flatMap(([keys, what]) => [
+                    h.dt([h.Class(`font-mono text-[11px] text-[#e6edf3]`)], [keys]),
+                    h.dd([h.Class(`text-[12px] ${dim}`)], [what]),
+                  ]),
+                ]),
+              ],
+            ),
+          ],
+        )
+      : h.span([]),
   ])
 }
+
+const keymapRows: ReadonlyArray<readonly [string, string]> = [
+  ['/', 'focus the search field'],
+  ['j / k', 'move down / up the commit list'],
+  ['space', 'tick or untick the commit under the cursor'],
+  ['enter', 'focus the diff pane'],
+  ['esc', 'leave the field, close this list'],
+  ['?', 'this list'],
+]

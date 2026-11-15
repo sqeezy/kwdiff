@@ -30,8 +30,12 @@ export const Message = defineMessageUnion({
   ToggledAll: { on: Schema.Boolean },
   MovedCursor: { delta: Schema.Number },
   SelectedFile: { index: Schema.Number },
-  SucceededSelection: { files: Schema.Array(FilePatch), roots: Schema.Array(Schema.String) },
-  SucceededPatch: { id: Schema.Number, patch: Schema.String },
+  SucceededSelection: {
+    files: Schema.Array(FilePatch),
+    roots: Schema.Array(Schema.String),
+    error: Schema.NullOr(Schema.String),
+  },
+  SucceededPatch: { id: Schema.Number, patch: Schema.String, error: Schema.NullOr(Schema.String) },
 
   Startup: {},
   SucceededConfig: {
@@ -45,6 +49,7 @@ export const Message = defineMessageUnion({
   PressedSpace: {},
   PressedEnter: {},
   PressedEscape: {},
+  ToggledKeymap: {},
   FocusedSearch: {},
   SearchFocused: {},
   DiffFocused: {},
