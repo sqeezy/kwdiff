@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-11-15
+
+### Fixed
+
+- **The diff pane scrolls.** It was `overflow-hidden`, so the viewer's full
+  height was clipped and there was no scroll surface at all — j, k and the
+  arrows now move it by lines (verified on a Windows machine: 0 → 216 px over
+  three presses).
+- Hunk jumps (`n` / `p`) address the viewer's own scroll targets, by file item
+  and added-side line.
+
+### Added
+
+- A long fixture patch, so scrolling has something to scroll in the browser.
+
 ## [0.2.7] - 2026-11-15
 
 ### Fixed
