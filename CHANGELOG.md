@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-15
+
+### Fixed
+
+- The diff pane no longer goes blank: the patch bridge decodes every shape the
+  IPC layer returns, and a failed file or patch load shows git's message in
+  the pane instead of an empty list.
+
+### Added
+
+- `?` opens the in-app keymap; `esc` closes it.
+- 5 more story tests (22 total): error surfacing and the keymap.
+
 ### Added
 
 - The native folder picker (`tauri-plugin-dialog`) behind *Open repository…*,
