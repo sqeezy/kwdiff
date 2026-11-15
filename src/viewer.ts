@@ -10,18 +10,38 @@ export const setViewer = (view: CodeView | null): void => {
   current = view
 }
 
-export const scrollToLine = (line: number): void => {
-  current?.scrollTo({ type: 'line', id: 'f0', lineNumber: line, side: 'additions', behavior: 'smooth' })
-}
+let hunks: ReadonlyArray<Readonly<{ id: string; line: number }>> = []
 
-// The added-side start line of every hunk, in order: what `n`/`p` walk.
-export const hunkStartLines = (patch: string | null): ReadonlyArray<number> => {
-  if (patch === null) return []
-  const lines: number[] = []
+// Each hunk belongs to a file item (`f0`, `f1`, …) and an added-side line.
+// Scroll targets need both; a bare line number means nothing to the viewer.
+export const hunkTargets = (patch: string): ReadonlyArray<{ id: string; line: number }> => {
+  const found: Array<{ id: string; line: number }> = []
+  let file = -1
   for (const text of patch.split('\n')) {
+    if (text.startsWith('diff --git')) file += 1
     if (!text.startsWith('@@')) continue
     const match = /\+(\d+)/.exec(text)
-    if (match?.[1] !== undefined) lines.push(Number(match[1]))
+    const line = match?.[1] === undefined ? 1 : Number(match[1])
+    found.push({ id: `f${Math.max(file, 0)}`, line })
   }
-  return lines
+  return found
+}
+
+export const setHunks = (patch: string | null): void => {
+  hunks = patch === null ? [] : hunkTargets(patch)
+}
+
+export const hunkCount = (): number => hunks.length
+
+export const scrollToHunk = (index: number): void => {
+  const target = hunks[index]
+  if (target === undefined) return
+  current?.scrollTo({
+    type: 'line',
+    id: target.id,
+    lineNumber: target.line,
+    side: 'additions',
+    behavior: 'instant',
+    align: 'start',
+  })
 }

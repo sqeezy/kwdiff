@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-11-15
+
+### Fixed
+
+- `?` opens the keymap on every layout: it is read from a raw keydown listener
+  instead of the binding table, whose shift matching missed it.
+- `n` / `p` / `g` scroll Pierre's viewer to the right place: each hunk now
+  carries its file item id as well as its line, and the scroll is instant.
+
 ## [0.2.6] - 2026-11-15
 
 ### Changed

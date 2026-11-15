@@ -1,13 +1,13 @@
-import { Effect, Schema } from 'effect'
+import { Effect, Option, Schema } from 'effect'
 import { CodeView, parsePatchFiles } from '@pierre/diffs'
 import { Command, Mount, Subscription, type Update } from 'foldkit'
-import { focus, streamFromKeyBindings } from 'foldkit/dom'
+import { focus, streamFromEventFilterMap, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
-import { hunkStartLines, scrollToLine, setViewer } from './viewer'
+import { scrollToHunk, setHunks, setViewer } from './viewer'
 import { Message } from './message'
 import type { Model } from './model'
 import type { FilePatch, RootOf } from './types'
@@ -164,10 +164,10 @@ export const FocusSelector = Command.define('FocusSelector', {
 })
 
 export const ScrollToHunk = Command.define('ScrollToHunk', {
-  args: { index: Schema.Number, line: Schema.Number },
+  args: { index: Schema.Number },
   messages: [Message.ScrolledToHunk],
-  execute: ({ index, line }) =>
-    Effect.sync(() => scrollToLine(line)).pipe(Effect.as(Message.ScrolledToHunk({ index }))),
+  execute: ({ index }) =>
+    Effect.sync(() => scrollToHunk(index)).pipe(Effect.as(Message.ScrolledToHunk({ index }))),
 })
 
 // Pierre's CodeView owns its own shadow DOM, so it is mounted imperatively and
@@ -192,6 +192,7 @@ const MountDiff = Mount.define('MountDiff', {
         view.setItems(
           files.map((fileDiff, index) => ({ id: `f${index}`, type: 'diff' as const, fileDiff })),
         )
+        setHunks(patch)
         setViewer(view)
         return view
       }),
@@ -217,6 +218,18 @@ const BlurActive = Command.define('BlurActive', {
 
 const hunkCount = (patch: string | null): number =>
   patch === null ? 0 : patch.split('\n').filter(line => line.startsWith('@@')).length
+
+// `?` never matched through the binding table on a German layout, so it gets a
+// raw keydown listener that reads event.key itself.
+const questionMark = Subscription.persistentEntry(
+  streamFromEventFilterMap<Document, 'keydown', Message>({
+    // Read when the scope opens: `document` does not exist under vitest.
+    target: () => document,
+    type: 'keydown',
+    filterMapEvent: (event: KeyboardEvent) =>
+      event.key === '?' ? Option.some(Message.ToggledKeymap()) : Option.none(),
+  }),
+)
 
 const paneSelector = (pane: Model['pane']): string =>
   pane === 'search'
@@ -518,7 +531,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
         return {
           model: modifyFields(model, { hunkIndex: () => index }),
-          commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
+          commands: [ScrollToHunk({ index })],
         }
       }
       return { model }
@@ -547,7 +560,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
       return {
         model: modifyFields(model, { hunkIndex: () => index }),
-        commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
+        commands: [ScrollToHunk({ index })],
       }
     },
 
@@ -555,7 +568,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       const index = to === 'top' ? 0 : Math.max(0, hunkCount(model.patch) - 1)
       return {
         model: modifyFields(model, { hunkIndex: () => index }),
-        commands: [ScrollToHunk({ index, line: hunkStartLines(model.patch)[index] ?? 1 })],
+        commands: [ScrollToHunk({ index })],
       }
     },
 
@@ -667,6 +680,7 @@ export const init = (): Update.Return<Model, Message> => {
 }
 
 export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
+  questionMark,
   keys: Subscription.persistentEntry(
     streamFromKeyBindings<Message>({
       bindings: [
@@ -684,7 +698,6 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'g', mapEvent: () => Message.JumpedHunk({ to: 'top' }) },
         { keys: 'Shift+G', mapEvent: () => Message.JumpedHunk({ to: 'bottom' }) },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
-        { keys: '?', whileTyping: 'Allow', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
         { keys: 'v', mapEvent: () => Message.ToggledDiffStyle() },
       ],

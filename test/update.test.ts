@@ -2,6 +2,7 @@ import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
 import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollToHunk, update } from '../src/app'
+import { hunkTargets } from '../src/viewer'
 import { Message } from '../src/message'
 import type { Model } from '../src/model'
 
@@ -405,5 +406,29 @@ describe('pane navigation', () => {
       scrollResolved,
       model(m => expect(m.hunkIndex).toBe(0)),
     )
+  })
+})
+
+describe('hunk targets', () => {
+  test('map each hunk to its file item and added-side line', () => {
+    const patch = [
+      'diff --git a/a.ts b/a.ts',
+      '@@ -1 +1 @@',
+      '+one',
+      '@@ -9 +21 @@',
+      '+two',
+      'diff --git a/b.ts b/b.ts',
+      '@@ -0,0 +1 @@',
+      '+three',
+    ].join('\n')
+    expect(hunkTargets(patch)).toEqual([
+      { id: 'f0', line: 1 },
+      { id: 'f0', line: 21 },
+      { id: 'f1', line: 1 },
+    ])
+  })
+
+  test('an empty patch has no targets', () => {
+    expect(hunkTargets('')).toEqual([])
   })
 })
