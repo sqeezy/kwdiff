@@ -28,5 +28,11 @@ $argsJson = if ($null -ne $req.args) {
   '{}'
 }
 
-$output = & $ocu call $tool --args $argsJson 2>&1 | Out-String
-Set-Content -Path $Result -Value $output -Encoding utf8
+# PowerShell 5.1 strips embedded quotes when it calls a native exe, so the
+# command line is written to a .bat and handed to cmd, whose escaping rules we
+# can actually control.
+$escaped = $argsJson -replace '"', '\"'
+$bat = Join-Path $env:TEMP 'ocu-call.bat'
+$line = '"' + $ocu + '" call ' + $tool + ' --args "' + $escaped + '" > "' + $Result + '" 2>&1'
+Set-Content -Path $bat -Value $line -Encoding ascii
+& cmd.exe /c $bat | Out-Null
