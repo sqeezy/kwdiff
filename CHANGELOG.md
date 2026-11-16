@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-16
+
+### Added
+
+- **Diff pane line keys** (ANT-73): `j`/`k` and the arrows scroll the patch by
+  **lines**, reading the rendered line height, while `n`/`p` keep stepping
+  hunks and `g`/`shift+g` jump to the first and last. Scrolling is view state —
+  the pane is one `<pre>` scroller — so the model does not change on every key;
+  the hunk the keyboard is on stays where it was until `n`/`p` moves it.
+
+### Removed
+
+- `happy-dom` from the dev dependencies (ANT-62). It was only an *optional peer*
+  of vitest for its browser environment, and the suite runs in `node`; removing
+  it takes both open high Dependabot advisories with it. `npm audit` is clean.
+
 ## [0.4.0] - 2026-11-16
 
 ### Added
