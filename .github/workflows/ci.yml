@@ -62,6 +62,8 @@ jobs:
           WEBVIEW=$(powershell -NoProfile -Command "(Get-Item 'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe' | Select-Object -First 1).VersionInfo.ProductVersion")
           curl -sSL -o ed.zip "https://msedgedriver.microsoft.com/${WEBVIEW}/edgedriver_win64.zip"
           unzip -o -q ed.zip
+          echo "WebView2 runtime: ${WEBVIEW}"
+          ./msedgedriver.exe --version
           export MSEDGEDRIVER="$(pwd)\msedgedriver.exe"
           export PATH="$HOME/.cargo/bin:$PATH"
           npm run e2e

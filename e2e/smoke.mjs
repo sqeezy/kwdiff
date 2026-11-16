@@ -79,14 +79,34 @@ async function main() {
     }
     if (!up) throw new Error(`tauri-driver did not answer on ${BASE}`)
 
-    const session = await http('/session', 'POST', {
-      capabilities: {
-        alwaysMatch: {
-          browserName: 'wry',
-          'tauri:options': { application: APP },
-        },
-      },
-    })
+    // Starting the session is the one step that fails for reasons that are not
+    // the app's: msedgedriver sometimes cannot find the DevTools port of a
+    // freshly launched WebView2 (`DevToolsActivePort file doesn't exist`). That
+    // is a retry, not a red build — the assertions below are not retried.
+    const openSession = async () => {
+      let lastError
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        try {
+          return await http('/session', 'POST', {
+            capabilities: {
+              alwaysMatch: {
+                browserName: 'wry',
+                'tauri:options': { application: APP },
+              },
+            },
+          })
+        } catch (error) {
+          lastError = error
+          console.log(
+            `     session attempt ${attempt} failed: ${String(error.message).split('\n')[0]}`,
+          )
+          await sleep(8000)
+        }
+      }
+      throw lastError
+    }
+
+    const session = await openSession()
     const sid = session.sessionId
     const exec = script => http(`/session/${sid}/execute/sync`, 'POST', { script, args: [] })
 
