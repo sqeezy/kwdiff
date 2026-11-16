@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-11-16
+
+### Added
+
+- **Range selection in the commit list**: shift-click selects from the anchor to
+  the clicked row, shift+arrow extends it, a plain click toggles one row and
+  moves the anchor. Shift is tracked as state, because the view builder passes
+  messages rather than events. 5 story tests (31 total).
+
 ## [0.2.9] - 2026-11-15
 
 ### Changed
