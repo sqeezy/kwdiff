@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-16
+
+### Added
+
+- **Filters** (ANT-64): a row under the top bar with the four things `git log`
+  already does — **author**, **path**, **since**, **until** — and a **regex**
+  toggle. Each field is one more input to the same debounced search, so a filter
+  change is never a second search mode; the button counts what is on, the empty
+  list says *with these N filters* and offers *Clear filters*.
+- **Literals by default**: with regex off, the keyword and the author are
+  matched literally (their extended-regex metacharacters are escaped in Rust), so
+  `a.b` finds `a.b` and not `axb`. With regex on they are extended regular
+  expressions, and `-a` switches from `-S` (fixed string) to `-G` (regex).
+- Rust unit tests over the arguments git receives, run with `cargo test --lib`
+  and in CI: literal escaping, the author pattern only when regex is on, an
+  `until` date covering its whole day, the pathspec after `--`. 8 more story
+  tests (47 total).
+
+### Fixed
+
+- **`-E` is passed unconditionally.** With an empty keyword the search used to
+  pass no pattern mode, so git read the author filter as a *basic* regex, where
+  `\|` is alternation — a literal `anton|dependabot` matched every commit
+  instead of none. The bench e2e caught it.
+- `--until=<date>` ends at `23:59:59` for a bare date instead of midnight, which
+  silently dropped that day's commits.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

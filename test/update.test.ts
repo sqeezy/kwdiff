@@ -1,9 +1,10 @@
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollToHunk, update } from '../src/app'
+import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollToHunk, noFilters, update } from '../src/app'
 
 import { Message } from '../src/message'
+import { activeFilterCount, hasFilters } from '../src/model'
 import type { Model } from '../src/model'
 
 const repo = { name: 'acme-api', root: 'C:\\work\\acme-api' }
@@ -34,6 +35,8 @@ const base: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  filters: { ...noFilters },
+  showFilters: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 1,
@@ -54,7 +57,7 @@ const selectionResolved = Command.resolve(
 // nothing further: the test asserts the new generation, not the search.
 const debounceStale = Command.resolve(
   DebouncedSearch,
-  Message.SearchRequested({ id: -1, keyword: '', code: false, branch: null }),
+  Message.SearchRequested({ id: -1, keyword: '', code: false, branch: null, filters: noFilters }),
 )
 
 describe('selection', () => {
@@ -597,6 +600,101 @@ describe('two-endpoint compare', () => {
       model(m => {
         expect(m.files).toEqual([])
       }),
+    )
+  })
+})
+
+// The filters are `git log`'s own limits, passed through. `Command.resolve`
+// only checks which Message comes back, so these read the Command's args
+// directly — that is where a filter has to show up to reach git.
+describe('filters', () => {
+  const filtersOf = (over: Partial<Model['filters']> = {}): Model['filters'] => ({
+    ...noFilters,
+    ...over,
+  })
+
+  const firstCommand = (out: { commands?: ReadonlyArray<unknown> }) =>
+    out.commands?.[0] as { name: string; args?: Record<string, unknown> } | undefined
+
+  test('a filter reaches the search Command arguments', () => {
+    const out = update(base, Message.ChangedFilters({ filters: filtersOf({ author: 'Petra' }) }))
+    expect(out.model.filters.author).toBe('Petra')
+    const command = firstCommand(out)
+    expect(command?.name).toBe('DebouncedSearch')
+    expect(command?.args).toMatchObject({
+      keyword: 'ABC-123',
+      branch: null,
+      filters: { author: 'Petra', path: '', since: '', until: '', regex: false },
+    })
+  })
+
+  test('regex is one query away, and the button counts it', () => {
+    const out = update(base, Message.ToggledRegex())
+    expect(out.model.filters.regex).toBe(true)
+    expect(firstCommand(out)?.args).toMatchObject({ filters: { regex: true } })
+    expect(activeFilterCount(out.model.filters)).toBe(1)
+  })
+
+  test('every set field counts as one filter, whitespace does not', () => {
+    expect(
+      activeFilterCount(
+        filtersOf({ author: 'x', path: 'src/', since: '2026-01-01', until: '2026-02-01', regex: true }),
+      ),
+    ).toBe(5)
+    expect(hasFilters(noFilters)).toBe(false)
+    expect(hasFilters(filtersOf({ author: '   ' }))).toBe(false)
+  })
+
+  test('clearing resets every field and asks again', () => {
+    const out = update(
+      { ...base, filters: filtersOf({ author: 'Petra', path: 'src/', regex: true }) },
+      Message.ClearedFilters(),
+    )
+    expect(out.model.filters).toEqual(noFilters)
+    expect(firstCommand(out)?.args).toMatchObject({ filters: noFilters })
+  })
+
+  test('a keystroke keeps the filters in the query', () => {
+    const out = update(
+      { ...base, filters: filtersOf({ path: 'src/http' }) },
+      Message.ChangedKeyword({ value: 'retry' }),
+    )
+    expect(firstCommand(out)?.args).toMatchObject({
+      keyword: 'retry',
+      filters: { path: 'src/http' },
+    })
+  })
+
+  test('no repository, no search', () => {
+    const out = update(
+      { ...base, repo: null },
+      Message.ChangedFilters({ filters: filtersOf({ author: 'Petra' }) }),
+    )
+    expect(out.model.filters.author).toBe('Petra')
+    expect(out.commands).toEqual([])
+  })
+
+  test('opening a repository drops filters typed for the old history', () => {
+    story(
+      update,
+      given({ ...base, filters: filtersOf({ author: 'Petra' }) }),
+      message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      model(m => {
+        expect(m.filters).toEqual(noFilters)
+      }),
+    )
+  })
+
+  test('the panel opens with the caret in the first field; escape closes it', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledFiltersPanel()),
+      Command.resolve(FocusSelector, Message.ElementFocused()),
+      model(m => expect(m.showFilters).toBe(true)),
+      message(Message.PressedEscape()),
+      model(m => expect(m.showFilters).toBe(false)),
     )
   })
 })

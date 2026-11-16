@@ -1,7 +1,7 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 
-import { Commit, FilePatch } from './model'
+import { Commit, FilePatch, Filters } from './model'
 
 export const Message = defineMessageUnion({
   // repository
@@ -21,7 +21,12 @@ export const Message = defineMessageUnion({
     keyword: Schema.String,
     code: Schema.Boolean,
     branch: Schema.NullOr(Schema.String),
+    filters: Filters,
   },
+  ChangedFilters: { filters: Filters },
+  ToggledRegex: {},
+  ClearedFilters: {},
+  ToggledFiltersPanel: {},
   SucceededSearch: { id: Schema.Number, commits: Schema.Array(Commit) },
   FailedSearch: { id: Schema.Number, message: Schema.String },
 

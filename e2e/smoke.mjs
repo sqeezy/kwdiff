@@ -224,14 +224,26 @@ async function main() {
         ? 'v0.1.0'
         : (refs.find(name => name !== fromRef) ?? '')
 
-    const choose = (slot, value) =>
+    // A field is a controlled input: set the value, then dispatch the event
+    // Foldkit listens to, and read it back.
+    const setField = (selector, value) =>
       exec(`
-        const el = document.getElementById("compare-${slot}");
+        const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return "missing";
         el.value = ${JSON.stringify(value)};
         el.dispatchEvent(new Event("input", { bubbles: true }));
         return el.value;
       `)
+
+    const clickOn = selector =>
+      exec(`
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return false;
+        el.click();
+        return true;
+      `)
+
+    const choose = (slot, value) => setField(`#compare-${slot}`, value)
 
     await choose('from', fromRef)
     await choose('to', toRef)
@@ -295,7 +307,80 @@ async function main() {
     )
     check('the ticked patch is back in the pane', backToTicks === true)
 
-    // 6. ? opens the keymap (it is read from a raw keydown listener, because
+    // 6. Filters are `git log`'s own limits, so they have to reach git: an
+    //    author narrows, a literal is not a pattern, regex makes it one again.
+    await setField('#kw-search', '')
+    const everything = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value > 10,
+      20000,
+    )
+    check('clearing the keyword lists the history', everything > 10, `rows=${everything}`)
+
+    await clickOn('#filters-toggle')
+    const filterRow = await waitFor(
+      'return document.getElementById("filter-row") !== null',
+      value => value === true,
+      5000,
+    )
+    check('the filter row opens', filterRow === true)
+
+    const caret = await waitFor(
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"',
+      value => value === 'filter-author',
+      5000,
+    )
+    check('the row takes the caret', caret === 'filter-author', `focus=${caret}`)
+
+    // The bench repository has both an Anton Herzog and dependabot commits.
+    await setField('#filter-author', 'dependabot')
+    const byAuthor = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value > 0 && value < everything,
+      20000,
+    )
+    check(
+      'an author filter narrows the list',
+      byAuthor > 0 && byAuthor < everything,
+      `rows=${byAuthor} of ${everything}`,
+    )
+
+    // No author contains "|" literally: without regex this cannot match.
+    // Count ticks, not <li>s: a list with no matches still carries the
+    // "no match" message as one <li>.
+    await setField('#filter-author', 'anton|dependabot')
+    const literal = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value === 0,
+      20000,
+    )
+    check('without regex the author is a literal', literal === 0, `rows=${literal}`)
+
+    await clickOn('#filter-regex')
+    const asPattern = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value === everything,
+      20000,
+    )
+    check('regex makes it a pattern', asPattern === everything, `rows=${asPattern} of ${everything}`)
+
+    const badge = await exec('return document.getElementById("filters-toggle")?.textContent ?? ""')
+    check('the button counts the active filter', badge.includes('2'), `button=${badge}`)
+
+    await clickOn('#filter-clear')
+    const clearedFilters = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value === everything,
+      20000,
+    )
+    check(
+      'clear restores the list',
+      clearedFilters === everything,
+      `rows=${clearedFilters} of ${everything}`,
+    )
+    await clickOn('#filters-toggle')
+
+    // 7. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')
