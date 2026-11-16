@@ -10,6 +10,8 @@ export type FilePatch = Readonly<{
   added: number
   removed: number
   isNew: boolean
+  // The code search's pattern occurs in this file at the commit.
+  matched: boolean
 }>
 
 export type RootOf = Readonly<{ sha: string; root: string }>

@@ -91,7 +91,13 @@ const fixtureRepo = () => {
   const taller = app.map((line, i) =>
     i === 4 ? "export const route4 = () => '/changed/4'" : i === 29 ? '// moved' : line,
   )
-  taller.push(...Array.from({ length: 200 }, (_, i) => `export const extra${i} = ${i}`))
+  // The needle lives in the last hunk (the append), so a code search should
+  // open app.ts there and not at line 1.
+  taller.push(
+    ...Array.from({ length: 200 }, (_, i) =>
+      i === 150 ? '// needle-in-a-changed-line' : `export const extra${i} = ${i}`,
+    ),
+  )
   write('src/app.ts', taller)
   write('src/ui.ts', ['export const view = () => "pierre"'])
   commit("feat: render the patch with Pierre's CodeView", '2026-01-18T09:00:00')
@@ -563,7 +569,42 @@ async function main() {
     )
     await clickOn('#filters-toggle')
 
-    // 7. ? opens the keymap (it is read from a raw keydown listener, because
+    // 7. Search-to-hunk: `-a` matched a changed line, so the patch opens at the
+    //    hunk that matched and the file that contains it is marked.
+    await clickOn('#code-toggle')
+    await setField('#kw-search', 'needle-in-a-changed-line')
+    const byCode = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value === 1,
+      20000,
+    )
+    check('a code search narrows to the commit', byCode === 1, `rows=${byCode}`)
+
+    // The needle travels with a *selection* load, so tick the commit off and on
+    // again; a search alone does not reload the patch.
+    await clickOn('#commit-list li button')
+    await waitFor(
+      'return document.querySelectorAll("#file-list li").length',
+      value => value === 0,
+      10000,
+    )
+    await clickOn('#commit-list li button')
+
+    const matchedFile = await waitFor(
+      'return document.querySelectorAll("#file-list [aria-label=\'the code search matched a changed line here\']").length',
+      value => value >= 1,
+      20000,
+    )
+    check('the file list marks the file that matched', matchedFile >= 1, `marked=${matchedFile}`)
+
+    const jumped = await waitFor(
+      'return (() => { const hunks = [...document.querySelectorAll(\'[id^="hunk-"]\')]; return hunks.findIndex(el => (el.getAttribute("class") || "").includes("1d3350")); })()',
+      value => value === 2,
+      20000,
+    )
+    check('the patch opens at the hunk that matched', jumped === 2, `active=${jumped}`)
+
+    // 8. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')

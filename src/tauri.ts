@@ -33,8 +33,12 @@ export const tauriGit: GitApi = {
 
   cancelSearch: (id: number) => invoke<null>('cancel_search', { id }).then(() => undefined),
 
-  files: (shas: ReadonlyArray<string>, endpoints: Endpoints | null) =>
-    invoke<ReadonlyArray<FilePatch>>('files', { shas, ...range(endpoints) }),
+  files: (
+    shas: ReadonlyArray<string>,
+    endpoints: Endpoints | null,
+    needle: string | null,
+    regex: boolean,
+  ) => invoke<ReadonlyArray<FilePatch>>('files', { shas, ...range(endpoints), needle, regex }),
 
   patch: (shas: ReadonlyArray<string>, path: string, endpoints: Endpoints | null) =>
     invoke<unknown>('patch', { shas, path, ...range(endpoints) }).then(decode),

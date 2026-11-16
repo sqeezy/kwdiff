@@ -10,7 +10,7 @@ type Fixture = Readonly<{
   subject: string
   root: 'main' | 'legacy'
   branches: ReadonlyArray<string>
-  files: ReadonlyArray<FilePatch & { patch: string }>
+  files: ReadonlyArray<Omit<FilePatch, 'matched'> & { patch: string }>
 }>
 
 const fixtures: ReadonlyArray<Fixture> = [
@@ -318,12 +318,12 @@ const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 // commits that the endpoint names, by sha or by carrying its branch. The
 // fixture has patches, not trees, so a compare here is the difference between
 // two such maps — enough to drive the browser dev server, nothing more.
-const treeAt = (endpoint: string): ReadonlyMap<string, FilePatch & { patch: string }> => {
+const treeAt = (endpoint: string): ReadonlyMap<string, Omit<FilePatch, 'matched'> & { patch: string }> => {
   const commits = fixtures
     .filter(f => f.sha === endpoint || f.branches.includes(endpoint))
     .sort(newestFirst)
     .reverse()
-  const tree = new Map<string, FilePatch & { patch: string }>()
+  const tree = new Map<string, Omit<FilePatch, 'matched'> & { patch: string }>()
   for (const commit of commits) {
     for (const file of commit.files) tree.set(file.path, file)
   }
@@ -332,7 +332,7 @@ const treeAt = (endpoint: string): ReadonlyMap<string, FilePatch & { patch: stri
 
 // `--grep` and `--author` are regular expressions unless the regex toggle is
 // off, where both are literals.
-const regex = (value: string): RegExp | null => {
+const regexOf = (value: string): RegExp | null => {
   try {
     return new RegExp(value, 'i')
   } catch {
@@ -355,7 +355,7 @@ const matchesFilters = (f: Fixture, filters: Filters): boolean => {
 
 const matchesKeyword = (f: Fixture, needle: string, code: boolean, filters: Filters): boolean => {
   if (needle === '') return true
-  const pattern = filters.regex ? regex(needle) : null
+  const pattern = filters.regex ? regexOf(needle) : null
   if (filters.regex && pattern === null) return false
   const inMessage = pattern === null
     ? f.subject.toLowerCase().includes(needle.toLowerCase())
@@ -398,7 +398,18 @@ export const mockGit: GitApi = {
   files: async (
     shas: ReadonlyArray<string>,
     endpoints: Endpoints | null,
+    needle: string | null,
+    regex: boolean,
   ): Promise<ReadonlyArray<FilePatch>> => {
+    // The code search's pattern, as the real thing matches it: a literal unless
+    // the regex toggle is on.
+    const pattern = needle === null || needle.trim() === '' ? null : regex ? regexOf(needle) : null
+    const matchesText = (text: string): boolean =>
+      needle === null || needle.trim() === ''
+        ? false
+        : pattern === null
+          ? text.toLowerCase().includes(needle.trim().toLowerCase())
+          : pattern.test(text)
     if (endpoints !== null) {
       const from = treeAt(endpoints.from)
       const to = treeAt(endpoints.to)
@@ -411,11 +422,12 @@ export const mockGit: GitApi = {
           added: file.added,
           removed: before === undefined ? 0 : file.removed,
           isNew: before === undefined,
+          matched: matchesText(file.patch),
         })
       }
       for (const [path, file] of from) {
         if (to.has(path)) continue
-        compared.push({ path, added: 0, removed: file.added, isNew: false })
+        compared.push({ path, added: 0, removed: file.added, isNew: false, matched: matchesText(file.patch) })
       }
       return compared.sort((a, b) => a.path.localeCompare(b.path))
     }
@@ -427,12 +439,19 @@ export const mockGit: GitApi = {
         byPath.set(
           file.path,
           seen === undefined
-            ? { path: file.path, added: file.added, removed: file.removed, isNew: file.isNew }
+            ? {
+                path: file.path,
+                added: file.added,
+                removed: file.removed,
+                isNew: file.isNew,
+                matched: matchesText(file.patch),
+              }
             : {
                 path: file.path,
                 added: seen.added + file.added,
                 removed: seen.removed + file.removed,
                 isNew: seen.isNew,
+                matched: seen.matched || matchesText(file.patch),
               },
         )
       }

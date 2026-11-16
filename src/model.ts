@@ -16,6 +16,8 @@ export const FilePatch = Schema.Struct({
   added: Schema.Number,
   removed: Schema.Number,
   isNew: Schema.Boolean,
+  // The code search's pattern occurs in this file at the commit.
+  matched: Schema.Boolean,
 })
 export const GitError = Schema.Struct({
   kind: Schema.Literals(['git-missing', 'not-a-repo', 'search', 'io']),

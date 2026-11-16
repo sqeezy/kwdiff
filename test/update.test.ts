@@ -1,7 +1,18 @@
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollDiffLines, ScrollToHunk, noFilters, update } from '../src/app'
+import {
+  DebouncedSearch,
+  FocusSelector,
+  LoadPatch,
+  LoadRefs,
+  LoadSelection,
+  ScrollDiffLines,
+  ScrollToHunk,
+  matchingHunk,
+  noFilters,
+  update,
+} from '../src/app'
 
 import { Message } from '../src/message'
 import { activeFilterCount, hasFilters } from '../src/model'
@@ -196,7 +207,7 @@ describe('files and roots', () => {
   test('an empty selection empties the panes', () => {
     story(
       update,
-      given({ ...base, files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false }], patch: 'x' }),
+      given({ ...base, files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false }], patch: 'x' }),
       message(Message.SucceededSelection({ id: 0, files: [], roots: [], error: null })),
       model(m => {
         expect(m.files).toEqual([])
@@ -207,8 +218,8 @@ describe('files and roots', () => {
 
   test('a shrunk file list pulls the cursor back into range', () => {
     const files = [
-      { path: 'a.ts', added: 1, removed: 0, isNew: false },
-      { path: 'b.ts', added: 2, removed: 1, isNew: false },
+      { path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false },
+      { path: 'b.ts', added: 2, removed: 1, isNew: false, matched: false },
     ]
     story(
       update,
@@ -490,7 +501,7 @@ describe('two-endpoint compare', () => {
       update,
       given({
         ...base,
-        files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false }],
+        files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false }],
         patch: 'the ticks',
         patchId: 4,
       }),
@@ -548,7 +559,7 @@ describe('two-endpoint compare', () => {
   })
 
   test('ticking while comparing leaves the tree diff in place', () => {
-    const files = [{ path: 'a.ts', added: 1, removed: 0, isNew: false }]
+    const files = [{ path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false }]
     story(
       update,
       given({ ...base, compare: { from: 'main', to: 'svn/legacy' }, files, patch: 'the diff', patchId: 9 }),
@@ -592,7 +603,7 @@ describe('two-endpoint compare', () => {
       message(
         Message.SucceededSelection({
           id: 1,
-          files: [{ path: 'stale.ts', added: 1, removed: 0, isNew: true }],
+          files: [{ path: 'stale.ts', added: 1, removed: 0, isNew: true, matched: false }],
           roots: [],
           error: null,
         }),
@@ -729,6 +740,78 @@ describe('diff scrolling', () => {
       given({ ...base, pane: 'diff' as const, patch, hunkIndex: 0 }),
       message(Message.MovedHunk({ delta: 1 })),
       Command.resolve(ScrollToHunk, Message.ScrolledToHunk({ index: 1 })),
+      model(m => {
+        expect(m.hunkIndex).toBe(1)
+      }),
+    )
+  })
+})
+
+// `-a` matched a changed line: the patch opens where it matched, and the file
+// that contains the match is the one that opens.
+describe('search-to-hunk', () => {
+  const patch = '@@ -1 +1 @@\n context\n+needle here\n@@ -9 +9 @@\n+other\n'
+
+  test('the matching hunk is found in the changed lines only', () => {
+    expect(matchingHunk(patch, 'needle', false)).toBe(0)
+    expect(matchingHunk(patch, 'other', false)).toBe(1)
+    expect(matchingHunk(patch, 'context', false)).toBe(-1)
+    expect(matchingHunk(patch, '@@', false)).toBe(-1)
+  })
+
+  test('regex mode reads the needle as a pattern', () => {
+    expect(matchingHunk(patch, 'nee.le', true)).toBe(0)
+    expect(matchingHunk(patch, 'nee.le', false)).toBe(-1)
+    expect(matchingHunk(patch, '(unclosed', true)).toBe(-1)
+  })
+
+  test('a code search opens the file that matched', () => {
+    const files = [
+      { path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false },
+      { path: 'b.ts', added: 2, removed: 1, isNew: false, matched: true },
+    ]
+    story(
+      update,
+      given({ ...base, code: true, keyword: 'needle', patchId: 0, files }),
+      message(Message.SucceededSelection({ id: 0, files, roots: [], error: null })),
+      Command.resolve(LoadPatch, Message.SucceededPatch({ id: 1, patch: '', error: null })),
+      model(m => {
+        expect(m.fileIndex).toBe(1)
+        expect(m.patchId).toBe(1)
+      }),
+    )
+  })
+
+  test('the patch jumps to the hunk that matched', () => {
+    story(
+      update,
+      given({ ...base, code: true, keyword: 'needle', patchId: 4, hunkIndex: 0 }),
+      message(Message.SucceededPatch({ id: 4, patch, error: null })),
+      Command.resolve(ScrollToHunk, Message.ScrolledToHunk({ index: 0 })),
+      model(m => {
+        expect(m.hunkIndex).toBe(0)
+        expect(m.patch).toBe(patch)
+      }),
+    )
+  })
+
+  test('a match in a later hunk moves the highlight there', () => {
+    story(
+      update,
+      given({ ...base, code: true, keyword: 'other', patchId: 4, hunkIndex: 0 }),
+      message(Message.SucceededPatch({ id: 4, patch, error: null })),
+      Command.resolve(ScrollToHunk, Message.ScrolledToHunk({ index: 1 })),
+      model(m => {
+        expect(m.hunkIndex).toBe(1)
+      }),
+    )
+  })
+
+  test('no code search, no jump: the patch opens at line 1', () => {
+    story(
+      update,
+      given({ ...base, code: false, keyword: 'needle', patchId: 4, hunkIndex: 1 }),
+      message(Message.SucceededPatch({ id: 4, patch, error: null })),
       model(m => {
         expect(m.hunkIndex).toBe(1)
       }),
