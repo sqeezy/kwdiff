@@ -17,11 +17,17 @@ believe it works:
 - **search-to-hunk** (ANT-60): `-a` matches should open where they matched;
 - **diff pane line keys** (ANT-73): arrows scroll lines, `n`/`p` keep hunks;
 - **the e2e gate is blocking** (ANT-74), with hunk-navigation assertions;
+- **range selection** (done 0.2.10): shift-click selects anchor → row,
+  shift+arrow extends it, a plain click toggles and moves the anchor;
 - no known high advisories (ANT-62).
 
 Release criterion: `npm run e2e` green on the bench VM **and** in CI, the
-installer from CI runs on the colleague's machine, and the five issues above are
+installer from CI runs on the colleague's machine, and the issues above are
 closed. Anything else is post-v1.
+
+Two-endpoint compare **stays in v1.0** (owner's call, 2026-11-15): the
+colleague's cross-root search works, but "what changed between these tips" is
+the question they ask next.
 
 ## v1.1 — the review artifact (target 2027-01-31)
 
