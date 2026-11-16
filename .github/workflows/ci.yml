@@ -64,7 +64,8 @@ jobs:
           # (Microsoft's elevated-host hardening, WebView2Feedback#5645); without it
           # msedgedriver never finds the DevTools port and session creation fails
           # with "DevToolsActivePort file doesn't exist".
-          reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" /v kwdiff.exe /t REG_SZ /d "--remote-debugging-port=0" /f
+          # (MSYS2_ARG_CONV_EXCL: Git Bash would turn /v into a path.)
+          MSYS2_ARG_CONV_EXCL='*' reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" /v kwdiff.exe /t REG_SZ /d "--remote-debugging-port=0" /f
           cargo install tauri-driver --locked
           WEBVIEW=$(powershell -NoProfile -Command "(Get-Item 'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe' | Select-Object -First 1).VersionInfo.ProductVersion")
           curl -sSL -o ed.zip "https://msedgedriver.microsoft.com/${WEBVIEW}/edgedriver_win64.zip"
