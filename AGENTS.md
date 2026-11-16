@@ -40,6 +40,29 @@ repository, `npm run dev` runs the UI against the fixture in `src/mock.ts`.
 `test/update.test.ts` runs `update` through `foldkit/story`. Every Command a
 message emits needs a resolver in the story; a missing one fails loudly, which
 is the point. New behaviour gets a test there before it gets a screenshot.
+`src-tauri` has Rust unit tests over the arguments git receives
+(`cargo test --manifest-path src-tauri/Cargo.toml --lib`) — they need no
+repository and run in CI.
+
+`e2e/smoke.mjs` builds **its own fixture repository** (14 commits, two authors,
+a tag, one three-hunk patch) and points the app at it, so a run means the same
+thing on a laptop, the bench VM and CI: no checkout, clone depth or existing
+config can change the outcome. It drives the built window through
+`tauri-driver` and is a **gate** — a red run fails the build, and the assertions
+are not retried (only session creation is, because that fails for reasons that
+are not the app's).
+
+Two environment facts it depends on:
+
+- It needs an interactive desktop session.
+- On GitHub's hosted Windows runners it needs the WebView2 policy below, because
+  those runners are **elevated** and WebView2 ≥ 150 ignores
+  `--remote-debugging-port` from the command line, HKCU and `WEBVIEW2_*`
+  (WebView2Feedback#5645). The HKLM policy
+  `SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments` with
+  `kwdiff.exe = --remote-debugging-port=0` is the override that survives;
+  without it msedgedriver dies with `DevToolsActivePort file doesn't exist`.
+  Git Bash also rewrites `reg`'s `/v` into a path — hence `MSYS2_ARG_CONV_EXCL`.
 
 ## Experimental
 

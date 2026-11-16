@@ -52,16 +52,26 @@ jobs:
         run: npm run tauri build
 
       # The e2e drives the real window, so it needs a desktop session: GitHub's
-      # Windows runners have one, but a headless agent does not. Non-blocking
-      # until it has proven itself on this runner a few times.
-      - name: e2e smoke (window, keyboard, scroll)
-        continue-on-error: true
+      # Windows runners have one. It is a gate now — a red e2e fails the build,
+      # which is what makes it worth the minutes. Proven by a deliberately
+      # broken assertion in the branch that added this step.
+      - name: e2e gate (window, keyboard, scroll, hunks)
         shell: bash
         run: |
+          # WebView2 >= 150 ignores --remote-debugging-port from the command line,
+          # HKCU and WEBVIEW2_* env vars when the host process is elevated — which
+          # GitHub's runners are. The HKLM policy is the one override that survives
+          # (Microsoft's elevated-host hardening, WebView2Feedback#5645); without it
+          # msedgedriver never finds the DevTools port and session creation fails
+          # with "DevToolsActivePort file doesn't exist".
+          # (MSYS2_ARG_CONV_EXCL: Git Bash would turn /v into a path.)
+          MSYS2_ARG_CONV_EXCL='*' reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" /v kwdiff.exe /t REG_SZ /d "--remote-debugging-port=0" /f
           cargo install tauri-driver --locked
           WEBVIEW=$(powershell -NoProfile -Command "(Get-Item 'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe' | Select-Object -First 1).VersionInfo.ProductVersion")
           curl -sSL -o ed.zip "https://msedgedriver.microsoft.com/${WEBVIEW}/edgedriver_win64.zip"
           unzip -o -q ed.zip
+          echo "WebView2 runtime: ${WEBVIEW}"
+          ./msedgedriver.exe --version
           export MSEDGEDRIVER="$(pwd)\msedgedriver.exe"
           export PATH="$HOME/.cargo/bin:$PATH"
           npm run e2e
