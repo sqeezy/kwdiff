@@ -1,7 +1,7 @@
 {
   "name": "kwdiff",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,7 +24,6 @@
     "@foldkit/vite-plugin": "0.29.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.9.0",
-    "happy-dom": "^20.14.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
