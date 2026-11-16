@@ -168,11 +168,12 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                     [
                       h.Attribute('role', 'checkbox'),
                       h.Attribute('aria-checked', on ? 'true' : 'false'),
-                      h.OnClick(Message.ToggledCommit({ sha: commit.sha })),
+                      h.Attribute('aria-selected', on ? 'true' : 'false'),
+                      h.OnClick(Message.ClickedCommit({ index })),
                       h.Class(
                         `flex w-full items-start gap-2 px-2.5 py-1.5 text-left hover:bg-[#161b22] ${
                           index === model.cursor ? 'bg-[#161b22]' : ''
-                        } ${on ? '' : 'opacity-80'}`,
+                        } ${on ? 'bg-[#131b26]' : 'opacity-80'}`,
                       ),
                     ],
                     [

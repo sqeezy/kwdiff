@@ -187,6 +187,26 @@ const hunkCount = (patch: string | null): number =>
 
 // `?` never matched through the binding table on a German layout, so it gets a
 // raw keydown listener that reads event.key itself.
+// Shift is tracked as state so a row click can extend the selection: the view
+// builder passes messages, never events, so the modifier has to arrive first.
+const shiftDown = Subscription.persistentEntry(
+  streamFromEventFilterMap<Document, 'keydown', Message>({
+    target: () => document,
+    type: 'keydown',
+    filterMapEvent: (event: KeyboardEvent) =>
+      event.key === 'Shift' && !event.repeat ? Option.some(Message.ShiftDown()) : Option.none(),
+  }),
+)
+
+const shiftUp = Subscription.persistentEntry(
+  streamFromEventFilterMap<Document, 'keyup', Message>({
+    target: () => document,
+    type: 'keyup',
+    filterMapEvent: (event: KeyboardEvent) =>
+      event.key === 'Shift' ? Option.some(Message.ShiftUp()) : Option.none(),
+  }),
+)
+
 const questionMark = Subscription.persistentEntry(
   streamFromEventFilterMap<Document, 'keydown', Message>({
     // Read when the scope opens: `document` does not exist under vitest.
@@ -207,6 +227,15 @@ const paneSelector = (pane: Model['pane']): string =>
         : '#diff-pane'
 
 const focusPane = (pane: Model['pane']) => FocusSelector({ selector: paneSelector(pane) })
+
+// Shift-click and shift-arrow extend from the anchor; everything else toggles
+// one row and moves the anchor there.
+const selectRange = (model: Model, from: number, to: number) => {
+  const lo = Math.min(from, to)
+  const hi = Math.max(from, to)
+  const shas = model.commits.slice(lo, hi + 1).map(commit => commit.sha)
+  return withSelection(model, shas)
+}
 
 const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => ({
   model: modifyFields(model, {
@@ -450,6 +479,29 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         ? { model }
         : { model: modifyFields(model, { patch: () => patch, lastError: () => error }) },
 
+    ClickedCommit: ({ index }) => {
+      if (model.shiftDown && model.anchor !== null) {
+        return selectRange(model, model.anchor, index)
+      }
+      const commit = model.commits[index]
+      if (commit === undefined) return { model }
+      const selected = model.selectedShas.includes(commit.sha)
+        ? model.selectedShas.filter(other => other !== commit.sha)
+        : [...model.selectedShas, commit.sha]
+      return {
+        ...withSelection(model, selected),
+        model: modifyFields(model, {
+          selectedShas: () => selected,
+          anchor: () => index,
+          patch: () => null,
+          patchId: id => id + 1,
+        }),
+      }
+    },
+
+    ShiftDown: () => ({ model: modifyFields(model, { shiftDown: () => true }) }),
+    ShiftUp: () => ({ model: modifyFields(model, { shiftDown: () => false }) }),
+
     PressedSpace: () => {
       if (model.pane !== 'commits') return { model }
       const commit = model.commits[model.cursor]
@@ -474,6 +526,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       if (model.pane === 'commits') {
         const last = Math.max(0, model.commits.length - 1)
         const cursor = Math.min(last, Math.max(0, model.cursor + delta))
+        if (model.shiftDown && model.anchor !== null) {
+          const extended = selectRange(model, model.anchor, cursor)
+          return {
+            ...extended,
+            model: modifyFields(extended.model, { cursor: () => cursor }),
+          }
+        }
         return { model: modifyFields(model, { cursor: () => cursor }) }
       }
       if (model.pane === 'files') {
@@ -604,6 +663,8 @@ const emptyModel: Model = {
   commits: [],
   selectedShas: [],
   cursor: 0,
+  anchor: null,
+  shiftDown: false,
   files: [],
   fileIndex: 0,
   patch: null,
@@ -642,6 +703,8 @@ export const init = (): Update.Return<Model, Message> => {
 
 export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
   questionMark,
+  shiftDown,
+  shiftUp,
   keys: Subscription.persistentEntry(
     streamFromKeyBindings<Message>({
       bindings: [

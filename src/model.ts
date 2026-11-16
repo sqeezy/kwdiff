@@ -32,6 +32,8 @@ export const Model = Schema.Struct({
   commits: Schema.Array(Commit),
   selectedShas: Schema.Array(Schema.String),
   cursor: Schema.Number,
+  anchor: Schema.NullOr(Schema.Number),
+  shiftDown: Schema.Boolean,
   files: Schema.Array(FilePatch),
   fileIndex: Schema.Number,
   patch: Schema.NullOr(Schema.String),

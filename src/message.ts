@@ -27,6 +27,9 @@ export const Message = defineMessageUnion({
 
   // selection
   ToggledCommit: { sha: Schema.String },
+  ClickedCommit: { index: Schema.Number },
+  ShiftDown: {},
+  ShiftUp: {},
   ToggledAll: { on: Schema.Boolean },
   MovedCursor: { delta: Schema.Number },
   SelectedFile: { index: Schema.Number },

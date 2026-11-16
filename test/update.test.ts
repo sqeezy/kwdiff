@@ -23,6 +23,8 @@ const base: Model = {
   commits,
   selectedShas: [],
   cursor: 0,
+  anchor: null,
+  shiftDown: false,
   files: [],
   fileIndex: 0,
   patch: null,
@@ -404,6 +406,67 @@ describe('pane navigation', () => {
       message(Message.JumpedHunk({ to: 'top' })),
       scrollResolved,
       model(m => expect(m.hunkIndex).toBe(0)),
+    )
+  })
+})
+
+describe('range selection', () => {
+  test('a plain click toggles the row and moves the anchor', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ClickedCommit({ index: 1 })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      model(m => {
+        expect(m.selectedShas).toEqual(['e3f1a07'])
+        expect(m.anchor).toBe(1)
+      }),
+    )
+  })
+
+  test('shift-click selects the whole range from the anchor', () => {
+    story(
+      update,
+      given({ ...base, shiftDown: true, anchor: 0, cursor: 0 }),
+      message(Message.ClickedCommit({ index: 1 })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      model(m => {
+        expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
+      }),
+    )
+  })
+
+  test('shift-click backwards selects the same range', () => {
+    story(
+      update,
+      given({ ...base, shiftDown: true, anchor: 1, cursor: 1 }),
+      message(Message.ClickedCommit({ index: 0 })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      model(m => {
+        expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
+      }),
+    )
+  })
+
+  test('shift+arrow extends the selection from the anchor', () => {
+    story(
+      update,
+      given({ ...base, pane: 'commits', shiftDown: true, anchor: 0, cursor: 0 }),
+      message(Message.MovedInPane({ delta: 1 })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      model(m => {
+        expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
+        expect(m.cursor).toBe(1)
+      }),
+    )
+  })
+
+  test('releasing shift returns to plain toggling', () => {
+    story(
+      update,
+      given({ ...base, shiftDown: true }),
+      message(Message.ShiftUp()),
+      model(m => expect(m.shiftDown).toBe(false)),
     )
   })
 })
