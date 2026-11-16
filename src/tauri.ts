@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type { GitApi } from './git'
-import type { Commit, Config, FilePatch, Ref, Repo, RootOf, SearchArgs } from './types'
+import type { Commit, Config, Endpoints, FilePatch, Ref, Repo, RootOf, SearchArgs } from './types'
 
 // A patch comes back as `ipc::Response` bytes. Depending on the bridge and the
 // build, that arrives as an ArrayBuffer, a typed array, or a plain number[] —
@@ -17,6 +17,13 @@ const decode = (bytes: unknown): string => {
   return String(bytes ?? '')
 }
 
+// Two endpoints travel as two nullable args, in the shape Rust takes them: both
+// set is a tree diff, neither is the tick mode.
+const range = (endpoints: Endpoints | null) => ({
+  from: endpoints?.from ?? null,
+  to: endpoints?.to ?? null,
+})
+
 export const tauriGit: GitApi = {
   openRepo: (path: string) => invoke<Repo>('open_repo', { path }),
 
@@ -26,12 +33,14 @@ export const tauriGit: GitApi = {
 
   cancelSearch: (id: number) => invoke<null>('cancel_search', { id }).then(() => undefined),
 
-  files: (shas: ReadonlyArray<string>) => invoke<ReadonlyArray<FilePatch>>('files', { shas }),
+  files: (shas: ReadonlyArray<string>, endpoints: Endpoints | null) =>
+    invoke<ReadonlyArray<FilePatch>>('files', { shas, ...range(endpoints) }),
 
-  patch: (shas: ReadonlyArray<string>, path: string) =>
-    invoke<unknown>('patch', { shas, path }).then(decode),
+  patch: (shas: ReadonlyArray<string>, path: string, endpoints: Endpoints | null) =>
+    invoke<unknown>('patch', { shas, path, ...range(endpoints) }).then(decode),
 
-  roots: (shas: ReadonlyArray<string>) => invoke<ReadonlyArray<RootOf>>('roots', { shas }),
+  roots: (shas: ReadonlyArray<string>, endpoints: Endpoints | null) =>
+    invoke<ReadonlyArray<RootOf>>('roots', { shas, ...range(endpoints) }),
 }
 
 export const tauriConfig = {

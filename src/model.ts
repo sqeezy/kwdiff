@@ -22,6 +22,13 @@ export const GitError = Schema.Struct({
   message: Schema.String,
 })
 
+// The two-slot compare: both slots set is a tree diff (`git diff A B`), which
+// needs no common ancestor. One slot set is still tick mode.
+export const Endpoints = Schema.Struct({
+  from: Schema.NullOr(Schema.String),
+  to: Schema.NullOr(Schema.String),
+})
+
 export const Model = Schema.Struct({
   repo: Schema.NullOr(Repo),
   recents: Schema.Array(Repo),
@@ -43,8 +50,10 @@ export const Model = Schema.Struct({
   pane: Schema.Literals(['search', 'commits', 'files', 'diff']),
   hunkIndex: Schema.Number,
   branches: Schema.Array(Schema.Struct({ root: Schema.String, branch: Schema.String })),
+  compare: Endpoints,
   searching: Schema.Boolean,
   searchId: Schema.Number,
+  selectionId: Schema.Number,
   patchId: Schema.Number,
   error: Schema.NullOr(GitError),
 })

@@ -11,8 +11,9 @@ believe it works:
 
 - the diff pane renders and scrolls on a real machine (done — ANT-61, verified
   by `npm run e2e` in the bench VM);
-- **two-endpoint compare** (ANT-66): "what changed between these two tips" is
-  the most asked review question and the one every competitor answers;
+- **two-endpoint compare** (done 0.3.0, ANT-66): "what changed between these
+  two tips" is the most asked review question and the one every competitor
+  answers;
 - **filters** (ANT-64): author, date, path, regex — `git log` already does it;
 - **search-to-hunk** (ANT-60): `-a` matches should open where they matched;
 - **diff pane line keys** (ANT-73): arrows scroll lines, `n`/`p` keep hunks;

@@ -183,12 +183,19 @@ async function main() {
     `)
     check('the chosen patch overflows its pane', overflow === true, `overflow=${overflow}`)
 
+    // Tab advances one pane, but the focus itself arrives from a Command: wait
+    // for each pane to actually hold it, or PageDown scrolls whatever the
+    // browser had focused and the assertion flakes (first seen on the 0.3.0
+    // bench run, focus=file-list).
+    const activeId =
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"'
     await press('Tab')
+    await waitFor(activeId, value => value === 'file-list', 5000)
     await press('Tab')
-    const focus = await exec(
-      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"',
-    )
+    const focus = await waitFor(activeId, value => value === 'diff-pane', 5000)
     console.log(`     focus before PageDown: ${focus}`)
+    check('tab reaches the diff pane', focus === 'diff-pane', `focus=${focus}`)
+
     await press('PageDown')
     await sleep(300)
     const scrolled = await waitFor(
@@ -198,7 +205,97 @@ async function main() {
     )
     check('PageDown scrolls the patch', scrolled > 0, `scrollTop=${scrolled}`)
 
-    // 5. ? opens the keymap (it is read from a raw keydown listener, because
+    // 5. Two-endpoint compare: two refs in the two slots are `git diff A B`,
+    //    a tree diff that needs no common ancestor, in the same panes. The
+    //    ticks are kept (not applied) while it is on.
+    const refs = await exec(
+      'return [...document.querySelectorAll("#compare-from option")].map(o => o.value).filter(v => v !== "")',
+    )
+    check(
+      'the compare slots list every ref',
+      Array.isArray(refs) && refs.length >= 2,
+      `refs=${Array.isArray(refs) ? refs.length : refs}`,
+    )
+    const fromRef = refs.includes('main') ? 'main' : refs[0]
+    // A tag is the safest second endpoint: it cannot quietly equal main after a
+    // push, and it is the oldest tree on the bench.
+    const toRef =
+      refs.includes('v0.1.0') && fromRef !== 'v0.1.0'
+        ? 'v0.1.0'
+        : (refs.find(name => name !== fromRef) ?? '')
+
+    const choose = (slot, value) =>
+      exec(`
+        const el = document.getElementById("compare-${slot}");
+        if (!el) return "missing";
+        el.value = ${JSON.stringify(value)};
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        return el.value;
+      `)
+
+    await choose('from', fromRef)
+    await choose('to', toRef)
+
+    const chip = await waitFor(
+      'return document.getElementById("compare-chip") !== null',
+      value => value === true,
+      5000,
+    )
+    check('two endpoints put the window in compare mode', chip === true)
+
+    const keptTicks = await exec(
+      'return document.querySelectorAll("[role=checkbox][aria-checked=true]").length',
+    )
+    check('the ticks survive the compare', keptTicks >= 1, `ticked=${keptTicks}`)
+
+    const note = await waitFor(
+      'return document.getElementById("compare-note")?.textContent ?? ""',
+      value => value.includes('→'),
+      10000,
+    )
+    check('the note names both endpoints', note === `${fromRef} → ${toRef}`, `note=${note}`)
+
+    const compareFiles = await waitFor(
+      'return document.querySelectorAll("#file-list li").length',
+      value => value > 0,
+      20000,
+    )
+    check('the tree diff fills the file list', compareFiles > 0, `files=${compareFiles}`)
+
+    // The header is the two endpoints as chosen; waiting for it also proves the
+    // pane is not still showing the ticked commit's patch.
+    const compareHeader = await waitFor(
+      'return (document.getElementById("diff-pane")?.textContent ?? "").slice(0, 80)',
+      value => value.startsWith(`# ${fromRef} → ${toRef}`),
+      20000,
+    )
+    check(
+      'the patch is the two endpoints, not the tick',
+      compareHeader.startsWith(`# ${fromRef} → ${toRef}`),
+      `header=${JSON.stringify(compareHeader.slice(0, 40))}`,
+    )
+
+    const treeDiff = await exec(
+      'return (document.getElementById("diff-pane")?.textContent ?? "").includes("diff --git")',
+    )
+    check('the compare renders a real git diff', treeDiff === true)
+
+    await choose('to', '')
+    const cleared = await waitFor(
+      'return document.getElementById("compare-note") === null',
+      value => value === true,
+      5000,
+    )
+    check('clearing a slot returns to the ticks', cleared === true)
+
+    const backToTicks = await waitFor(
+      'return (document.getElementById("diff-pane")?.textContent ?? "").startsWith("# ")',
+      value => value === true,
+      20000,
+    )
+    check('the ticked patch is back in the pane', backToTicks === true)
+
+    // 6. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')

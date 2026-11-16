@@ -8,9 +8,14 @@ import { configApi, gitApi } from './api'
 import { isTauri } from './git'
 import { Message } from './message'
 import type { Model } from './model'
-import type { FilePatch, RootOf } from './types'
+import type { Endpoints, FilePatch, RootOf } from './types'
 
 const DEBOUNCE = '250 millis'
+
+// Both slots set is a tree diff; anything else is the tick mode. Rust refuses a
+// single endpoint, so the UI and the Command share this one reading.
+const endpointsOf = (from: string | null, to: string | null): Endpoints | null =>
+  from !== null && to !== null ? { from, to } : null
 
 // ---- commands --------------------------------------------------------------
 
@@ -109,21 +114,32 @@ const RunSearch = Command.define('RunSearch', {
 
 // One load per selection change: the file list and the roots travel together,
 // so the pane can never show a file from one selection beside roots from another.
+// `id` is the generation: a slower answer from an older selection, or from an
+// older pair of endpoints, is dropped in update instead of landing late.
 export const LoadSelection = Command.define('LoadSelection', {
-  args: { shas: Schema.Array(Schema.String) },
+  args: {
+    id: Schema.Number,
+    shas: Schema.Array(Schema.String),
+    from: Schema.NullOr(Schema.String),
+    to: Schema.NullOr(Schema.String),
+  },
   messages: [Message.SucceededSelection],
-  execute: ({ shas }) =>
-    Effect.gen(function* () {
+  execute: ({ id, shas, from, to }) => {
+    const endpoints = endpointsOf(from, to)
+    return Effect.gen(function* () {
       const files = yield* Effect.tryPromise({
-        try: () => gitApi.files(shas),
+        try: () => gitApi.files(shas, endpoints),
         catch: error => String(error),
       })
+      // In compare mode Rust answers with the roots of the two endpoints, so the
+      // divider says "share no ancestor" only when they truly do not.
       const roots = yield* Effect.tryPromise({
-        try: () => gitApi.roots(shas),
+        try: () => gitApi.roots(shas, endpoints),
         catch: error => String(error),
       })
 
       return Message.SucceededSelection({
+        id,
         files: [...files],
         roots: [...new Set(roots.map(root => root.root))],
         error: null,
@@ -133,17 +149,27 @@ export const LoadSelection = Command.define('LoadSelection', {
       // worst outcome, and it is how the diff pane went blank for a whole day.
       Effect.catch(error =>
         Effect.succeed(
-          Message.SucceededSelection({ files: [], roots: [], error: String(error) }),
+          Message.SucceededSelection({ id, files: [], roots: [], error: String(error) }),
         ),
       ),
-    ),
+    )
+  },
 })
 
 export const LoadPatch = Command.define('LoadPatch', {
-  args: { id: Schema.Number, shas: Schema.Array(Schema.String), path: Schema.String },
+  args: {
+    id: Schema.Number,
+    shas: Schema.Array(Schema.String),
+    path: Schema.String,
+    from: Schema.NullOr(Schema.String),
+    to: Schema.NullOr(Schema.String),
+  },
   messages: [Message.SucceededPatch],
-  execute: ({ id, shas, path }) =>
-    Effect.tryPromise({ try: () => gitApi.patch(shas, path), catch: error => String(error) }).pipe(
+  execute: ({ id, shas, path, from, to }) =>
+    Effect.tryPromise({
+      try: () => gitApi.patch(shas, path, endpointsOf(from, to)),
+      catch: error => String(error),
+    }).pipe(
       Effect.map(patch => Message.SucceededPatch({ id, patch, error: null })),
       Effect.catch(error =>
         Effect.succeed(Message.SucceededPatch({ id, patch: '', error: String(error) })),
@@ -237,15 +263,67 @@ const selectRange = (model: Model, from: number, to: number) => {
   return withSelection(model, shas)
 }
 
-const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => ({
-  model: modifyFields(model, {
-    selectedShas: () => [...selectedShas],
+// One place turns "what the panes should show" into exactly one Command. The
+// generation goes up first, so an answer that is already in flight cannot land
+// on the newer selection or the newer pair of endpoints.
+const reload = (model: Model) => {
+  const id = model.selectionId + 1
+  const next = modifyFields(model, {
+    selectionId: () => id,
     patch: () => null,
     lastError: () => null,
-    patchId: id => id + 1,
-  }),
-  commands: [LoadSelection({ shas: [...selectedShas] })],
-})
+    patchId: patchId => patchId + 1,
+  })
+  return {
+    model: next,
+    commands: [
+      LoadSelection({
+        id,
+        shas: [...next.selectedShas],
+        from: next.compare.from,
+        to: next.compare.to,
+      }),
+    ],
+  }
+}
+
+// A tick is a selection change. While comparing, the tree diff owns the panes
+// and the ticks wait: no load, no blank patch.
+const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => {
+  const next = modifyFields(model, { selectedShas: () => [...selectedShas] })
+  return endpointsOf(next.compare.from, next.compare.to) === null
+    ? reload(next)
+    : { model: next, commands: [] }
+}
+
+// Choosing endpoints: picking the first slot changes nothing on screen, so it
+// costs no load; a full pair, or clearing one back to the ticks, does.
+const setEndpoints = (model: Model, compare: Model['compare']) => {
+  const before = endpointsOf(model.compare.from, model.compare.to)
+  const after = endpointsOf(compare.from, compare.to)
+  const next = modifyFields(model, { compare: () => compare })
+  return before === null && after === null ? { model: next } : reload(next)
+}
+
+// Selecting a file always reloads its patch under a new id, from the same
+// endpoints the file list came from.
+const openFile = (model: Model, index: number) => {
+  const file = model.files[index]
+  if (file === undefined) return { model }
+  const id = model.patchId + 1
+  return {
+    model: modifyFields(model, { fileIndex: () => index, patchId: () => id, patch: () => null }),
+    commands: [
+      LoadPatch({
+        id,
+        shas: [...model.selectedShas],
+        path: file.path,
+        from: model.compare.from,
+        to: model.compare.to,
+      }),
+    ],
+  }
+}
 
 export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
   Message.match<Update.Return<Model, Message>>(message, {
@@ -268,6 +346,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         files: () => [],
         patch: () => null,
         roots: () => [],
+        // The endpoints name refs of the repository that is leaving; a load
+        // already in flight for it must not land on this one.
+        compare: () => ({ from: null, to: null }),
+        selectionId: id => id + 1,
       })
       return {
         model: next,
@@ -422,56 +504,45 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       return { model: modifyFields(model, { cursor: () => cursor }) }
     },
 
-    SelectedFile: ({ index }) => {
-      const file = model.files[index]
-      if (file === undefined) return { model }
-      const id = model.patchId + 1
-      return {
-        model: modifyFields(model, {
-          fileIndex: () => index,
-          patchId: () => id,
-          patch: () => null,
-        }),
-        commands: [LoadPatch({ id, shas: [...model.selectedShas], path: file.path })],
+    SelectedFile: ({ index }) => openFile(model, index),
+
+    // Choosing the same endpoint again is not a change, and must not reload.
+    ChoseEndpoint: ({ slot, value }) => {
+      const compare = { ...model.compare, [slot]: value }
+      if (compare.from === model.compare.from && compare.to === model.compare.to) {
+        return { model }
       }
+      return setEndpoints(model, compare)
     },
 
-    SucceededSelection: ({ files, roots, error }) => {
+    UsedCommitAsEndpoint: ({ slot }) => {
+      const commit = model.commits[model.cursor]
+      if (commit === undefined || model.compare[slot] === commit.sha) return { model }
+      return setEndpoints(model, { ...model.compare, [slot]: commit.sha })
+    },
+
+    SwappedEndpoints: () => {
+      const { from, to } = model.compare
+      if (from === null && to === null) return { model }
+      return setEndpoints(model, { from: to, to: from })
+    },
+
+    SucceededSelection: ({ id, files, roots, error }) => {
+      if (id !== model.selectionId) return { model }
       const list = [...files]
       const rootList = [...new Set(roots)]
+      const withList = modifyFields(model, {
+        files: () => list,
+        roots: () => rootList,
+        lastError: () => error,
+      })
       if (list.length === 0) {
         return {
-          model: modifyFields(model, {
-            files: () => [],
-            roots: () => rootList,
-            patch: () => null,
-            fileIndex: () => 0,
-            lastError: () => error,
-          }),
+          model: modifyFields(withList, { patch: () => null, fileIndex: () => 0 }),
         }
       }
       const index = Math.min(model.fileIndex, list.length - 1)
-      const file = list[index]
-      if (file === undefined) {
-        return {
-          model: modifyFields(model, {
-            files: () => list,
-            roots: () => rootList,
-            lastError: () => error,
-          }),
-        }
-      }
-      const id = model.patchId + 1
-      return {
-        model: modifyFields(model, {
-          files: () => list,
-          roots: () => rootList,
-          fileIndex: () => index,
-          patchId: () => id,
-          lastError: () => error,
-        }),
-        commands: [LoadPatch({ id, shas: [...model.selectedShas], path: file.path })],
-      }
+      return openFile(withList, index)
     },
 
     SucceededPatch: ({ id, patch, error }) =>
@@ -488,15 +559,8 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       const selected = model.selectedShas.includes(commit.sha)
         ? model.selectedShas.filter(other => other !== commit.sha)
         : [...model.selectedShas, commit.sha]
-      return {
-        ...withSelection(model, selected),
-        model: modifyFields(model, {
-          selectedShas: () => selected,
-          anchor: () => index,
-          patch: () => null,
-          patchId: id => id + 1,
-        }),
-      }
+      const outcome = withSelection(model, selected)
+      return { ...outcome, model: modifyFields(outcome.model, { anchor: () => index }) }
     },
 
     ShiftDown: () => ({ model: modifyFields(model, { shiftDown: () => true }) }),
@@ -538,18 +602,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       if (model.pane === 'files') {
         const last = Math.max(0, model.files.length - 1)
         const index = Math.min(last, Math.max(0, model.fileIndex + delta))
-        const file = model.files[index]
-        if (file === undefined) return { model }
-        const id = model.patchId + 1
-        return {
-          model: modifyFields(model, {
-            fileIndex: () => index,
-            patchId: () => id,
-            patch: () => null,
-            hunkIndex: () => 0,
-          }),
-          commands: [LoadPatch({ id, shas: [...model.selectedShas], path: file.path })],
-        }
+        const outcome = openFile(model, index)
+        return outcome.commands === undefined
+          ? outcome
+          : { ...outcome, model: modifyFields(outcome.model, { hunkIndex: () => 0 }) }
       }
       if (model.pane === 'diff') {
         const last = Math.max(0, hunkCount(model.patch) - 1)
@@ -674,8 +730,10 @@ const emptyModel: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  compare: { from: null, to: null },
   searching: false,
   searchId: 0,
+  selectionId: 0,
   patchId: 0,
   error: null,
 }
@@ -721,6 +779,9 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'p', mapEvent: () => Message.MovedHunk({ delta: -1 }) },
         { keys: 'g', mapEvent: () => Message.JumpedHunk({ to: 'top' }) },
         { keys: 'Shift+G', mapEvent: () => Message.JumpedHunk({ to: 'bottom' }) },
+        { keys: 'f', mapEvent: () => Message.UsedCommitAsEndpoint({ slot: 'from' }) },
+        { keys: 't', mapEvent: () => Message.UsedCommitAsEndpoint({ slot: 'to' }) },
+        { keys: 'x', mapEvent: () => Message.SwappedEndpoints() },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
       ],

@@ -34,11 +34,20 @@ export const Message = defineMessageUnion({
   MovedCursor: { delta: Schema.Number },
   SelectedFile: { index: Schema.Number },
   SucceededSelection: {
+    id: Schema.Number,
     files: Schema.Array(FilePatch),
     roots: Schema.Array(Schema.String),
     error: Schema.NullOr(Schema.String),
   },
   SucceededPatch: { id: Schema.Number, patch: Schema.String, error: Schema.NullOr(Schema.String) },
+
+  // compare: two endpoints make a tree diff, whatever their ancestry
+  ChoseEndpoint: {
+    slot: Schema.Literals(['from', 'to']),
+    value: Schema.NullOr(Schema.String),
+  },
+  UsedCommitAsEndpoint: { slot: Schema.Literals(['from', 'to']) },
+  SwappedEndpoints: {},
 
   Startup: {},
   SucceededConfig: {

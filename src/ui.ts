@@ -2,6 +2,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { Message } from './message'
 import type { Model } from './model'
+import type { Endpoints } from './types'
 
 const bg = 'bg-[#0b0e14] text-[#c9d1d9]'
 const border = 'border-[#1f2733]'
@@ -50,11 +51,57 @@ const primary = (label: string, message: Message, h: HtmlBuilder<Message>) =>
     [label],
   )
 
+// Two endpoints make a tree diff; one or none is the tick mode.
+const endpointsOf = (model: Model): Endpoints | null =>
+  model.compare.from !== null && model.compare.to !== null
+    ? { from: model.compare.from, to: model.compare.to }
+    : null
+
+// A ref keeps its name; a commit is shortened and, while the search still
+// lists it, carries its subject.
+const endpointLabel = (model: Model, value: string): string => {
+  if (model.refs.some(ref => ref.name === value)) return value
+  const commit = model.commits.find(entry => entry.sha === value)
+  if (commit !== undefined) return `${value.slice(0, 7)} ${commit.subject}`
+  return /^[0-9a-f]{7,}$/.test(value) ? value.slice(0, 7) : value
+}
+
+// The same, without a subject: it has to fit a 214 px pane header.
+const shortLabel = (model: Model, value: string): string =>
+  model.refs.some(ref => ref.name === value) ? value : endpointLabel(model, value).split(' ')[0] ?? value
+
+// One slot of the compare picker: every ref, plus whichever commit the slot
+// holds so a sha never disappears when the search moves on.
+const endpointSelect = (slot: 'from' | 'to', model: Model, h: HtmlBuilder<Message>) => {
+  const value = model.compare[slot]
+  const knownRef = value !== null && model.refs.some(ref => ref.name === value)
+  return h.select(
+    [
+      h.Attribute('id', `compare-${slot}`),
+      h.Attribute('aria-label', `Compare ${slot}`),
+      h.Value(value ?? ''),
+      h.OnInput(next => Message.ChoseEndpoint({ slot, value: next === '' ? null : next })),
+      h.Class(
+        'max-w-[150px] truncate rounded border border-[#2b3543] bg-[#0b0e14] px-1.5 py-1 font-mono text-[11px] text-[#c9d1d9]',
+      ),
+      h.Attribute('title', value === null ? `Compare ${slot}` : endpointLabel(model, value)),
+    ],
+    [
+      h.option([h.Attribute('value', '')], [slot]),
+      ...model.refs.map(ref => h.option([h.Attribute('value', ref.name)], [ref.name])),
+      ...(value !== null && !knownRef
+        ? [h.option([h.Attribute('value', value)], [endpointLabel(model, value)])]
+        : []),
+    ],
+  )
+}
+
 export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
   const selected = model.commits.filter(commit => model.selectedShas.includes(commit.sha))
   const added = model.files.reduce((sum, file) => sum + file.added, 0)
   const removed = model.files.reduce((sum, file) => sum + file.removed, 0)
   const allTicked = model.commits.length > 0 && selected.length === model.commits.length
+  const compare = endpointsOf(model)
 
   return h.div([h.Class(`${bg} flex h-screen flex-col font-sans antialiased`)], [
     // ---- top bar ---------------------------------------------------------
@@ -107,6 +154,22 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           ],
           ['-a code'],
         ),
+        h.div([h.Class('flex items-center gap-1')], [
+          endpointSelect('from', model, h),
+          h.span([h.Class('font-mono text-[11px] text-[#556176]')], ['→']),
+          endpointSelect('to', model, h),
+          h.button(
+            [
+              h.OnClick(Message.SwappedEndpoints()),
+              h.Attribute('aria-label', 'Swap the two endpoints'),
+              h.Attribute('title', 'Swap the two endpoints (x)'),
+              h.Class(
+                'rounded border border-[#2b3543] px-1.5 py-1 font-mono text-[11px] text-[#7d8b9e] hover:border-[#3fb950] hover:text-[#3fb950]',
+              ),
+            ],
+            ['swap'],
+          ),
+        ]),
         h.button(
           [
             h.OnClick(Message.ToggledKeymap()),
@@ -139,6 +202,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div([h.Class(`flex items-center gap-2 border-b ${border} px-3 py-1.5`)], [
             h.span([h.Class(`font-mono text-[10.5px] ${dim}`)], ['Commits']),
             model.searching ? h.span([h.Class(`font-mono text-[10px] ${quiet}`)], ['searching…']) : h.span([]),
+            compare === null
+              ? h.span([])
+              : h.span(
+                  [
+                    h.Attribute('id', 'compare-chip'),
+                    h.Attribute('title', 'Ticks wait while two endpoints are compared'),
+                    h.Class('rounded border border-[#3fb950]/40 px-1 font-mono text-[10px] text-[#3fb950]'),
+                  ],
+                  ['compare'],
+                ),
             h.button(
               [
                 h.OnClick(Message.ToggledAll({ on: !allTicked })),
@@ -215,8 +288,18 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 
         // files
         h.section([h.Class(`flex min-h-0 flex-col border-b ${border} lg:border-b-0 lg:border-r`)], [
-          h.div([h.Class(`border-b ${border} px-3 py-1.5`)], [
+          h.div([h.Class(`flex items-center gap-2 border-b ${border} px-3 py-1.5`)], [
             h.span([h.Class(`font-mono text-[10.5px] ${dim}`)], [`Files · ${model.files.length}`]),
+            compare === null
+              ? h.span([])
+              : h.span(
+                  [
+                    h.Attribute('id', 'compare-note'),
+                    h.Attribute('title', `${compare.from} → ${compare.to}`),
+                    h.Class(`ml-auto min-w-0 truncate font-mono text-[10px] ${dim}`),
+                  ],
+                  [`${shortLabel(model, compare.from)} → ${shortLabel(model, compare.to)}`],
+                ),
           ]),
           h.ul(
             [
@@ -286,9 +369,13 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
             : h.span([]),
           model.patch === null
             ? h.p([h.Class(`px-4 py-10 text-center font-mono text-[11.5px] ${quiet}`)], [
-                model.selectedShas.length === 0
-                  ? 'Tick a commit to see its patch.'
-                  : 'Loading patch…',
+                compare !== null && model.lastError === null
+                  ? model.files.length === 0
+                    ? `No changes between ${shortLabel(model, compare.from)} and ${shortLabel(model, compare.to)}.`
+                    : 'Loading patch…'
+                  : model.selectedShas.length === 0
+                    ? 'Tick a commit to see its patch.'
+                    : 'Loading patch…',
               ])
             : h.pre(
                 [
@@ -431,6 +518,8 @@ const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['esc', 'one pane back, close this list'],
   ['n / p', 'next / previous hunk in the diff'],
   ['g / shift+g', 'first / last hunk'],
+  ['f / t', 'compare from / to the commit under the cursor'],
+  ['x', 'swap the two compared endpoints'],
   ['/', 'jump to the search field'],
   ['?', 'this list'],
 ]
