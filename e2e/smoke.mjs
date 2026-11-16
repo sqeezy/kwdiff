@@ -573,7 +573,7 @@ async function main() {
       value => value === true,
       5000,
     )
-    check('? opens the keymap', keymap === false) // TEMP: prove the gate fails
+    check('? opens the keymap', keymap === true)
 
     await http(`/session/${sid}`, 'DELETE')
   } finally {
