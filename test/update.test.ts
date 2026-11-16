@@ -1,7 +1,7 @@
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollToHunk, noFilters, update } from '../src/app'
+import { DebouncedSearch, FocusSelector, LoadPatch, LoadRefs, LoadSelection, ScrollDiffLines, ScrollToHunk, noFilters, update } from '../src/app'
 
 import { Message } from '../src/message'
 import { activeFilterCount, hasFilters } from '../src/model'
@@ -695,6 +695,43 @@ describe('filters', () => {
       model(m => expect(m.showFilters).toBe(true)),
       message(Message.PressedEscape()),
       model(m => expect(m.showFilters).toBe(false)),
+    )
+  })
+})
+
+// The diff pane is one <pre>: arrows and j/k move it by lines, which is view
+// state, so the model does not change; n/p keep their hunk jumps.
+describe('diff scrolling', () => {
+  const patch = '@@ -1 +1 @@\n+a\n@@ -9 +9 @@\n+b'
+
+  test('arrows and j/k scroll lines instead of stepping hunks', () => {
+    story(
+      update,
+      given({ ...base, pane: 'diff' as const, patch, hunkIndex: 1 }),
+      message(Message.MovedInPane({ delta: 1 })),
+      Command.resolve(ScrollDiffLines, Message.ScrolledDiffLines({ delta: 1 })),
+      model(m => {
+        expect(m.hunkIndex).toBe(1)
+      }),
+    )
+  })
+
+  test('the scroll Command carries the direction', () => {
+    const out = update({ ...base, pane: 'diff' as const, patch }, Message.MovedInPane({ delta: -3 }))
+    const command = out.commands?.[0] as { name: string; args?: Record<string, unknown> } | undefined
+    expect(command?.name).toBe('ScrollDiffLines')
+    expect(command?.args).toEqual({ delta: -3 })
+  })
+
+  test('n and p still move between hunks', () => {
+    story(
+      update,
+      given({ ...base, pane: 'diff' as const, patch, hunkIndex: 0 }),
+      message(Message.MovedHunk({ delta: 1 })),
+      Command.resolve(ScrollToHunk, Message.ScrolledToHunk({ index: 1 })),
+      model(m => {
+        expect(m.hunkIndex).toBe(1)
+      }),
     )
   })
 })

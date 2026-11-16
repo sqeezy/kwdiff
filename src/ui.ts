@@ -648,7 +648,7 @@ const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>)
 
 const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['tab / shift+tab', 'next / previous pane: search, commits, files, diff'],
-  ['j / k  ·  ↓ / ↑', 'move inside the focused pane'],
+  ['j / k  ·  ↓ / ↑', 'move inside the focused pane; scroll lines in the diff'],
   ['space', 'tick or untick the commit under the cursor'],
   ['enter', 'one pane deeper'],
   ['esc', 'one pane back, close the keymap or the filters'],
