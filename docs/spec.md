@@ -37,7 +37,10 @@ tabs or multiple repositories; macOS/Linux; code signing; auto-update.
    same search, also after the debounce.
 3. Tick commits: the file pane lists the union of their files with added and
    removed counts; the diff pane shows the selected file's patch. A divider
-   appears when the selection's commits share no ancestor.
+   appears when the selection's commits share no ancestor. With **`-a`** on and
+   a keyword, a commit matched by a changed line opens the file that contains it
+   (marked with a dot) and the patch at the **hunk that matched**, highlighted
+   by the same active-hunk style `n`/`p` use.
 4. Compare two tips: pick a ref in each of the two slots beside the search
    field, or press `f` / `t` to put the commit under the cursor into the from /
    to slot. With both set the panes show `git diff A B` — a tree diff that
@@ -78,7 +81,8 @@ Tauri 2 (Windows x64, WebView2)
 #[tauri::command] async fn cancel_search(state: State<'_, GitState>, id: u64)
     -> Result<(), GitError>;
 #[tauri::command] async fn files(state: State<'_, GitState>, shas: Vec<String>,
-    from: Option<String>, to: Option<String>) -> Result<Vec<FilePatch>, GitError>;
+    from: Option<String>, to: Option<String>, needle: Option<String>, regex: bool)
+    -> Result<Vec<FilePatch>, GitError>;
 #[tauri::command] async fn patch(state: State<'_, GitState>, shas: Vec<String>,
     path: String, from: Option<String>, to: Option<String>)
     -> Result<tauri::ipc::Response, GitError>;
@@ -87,6 +91,11 @@ Tauri 2 (Windows x64, WebView2)
 #[tauri::command] async fn refs(repo: String) -> Result<Vec<Ref>, GitError>;
 ```
 
+- `files` also takes the code search's `needle` (and `regex`): it marks the
+  files the pattern occurs in **at the commit** (`git grep -l -i -E -e <p> <sha>`;
+  exit 1 is "no match", not a failure), so the pane can open the file that
+  matched. A match that only exists in a *removed* line is not marked — the
+  patch scan still finds it once that file is open.
 - `files`, `patch` and `roots` take the pair. Both endpoints set is a tree
   diff: `git diff --no-renames A B`, `--numstat` for the list and per path for
   the patch. One endpoint alone is refused (`compare needs two endpoints`),

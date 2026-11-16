@@ -16,7 +16,7 @@ believe it works:
   answers;
 - **filters** (done 0.4.0, ANT-64): author, date, path, regex — `git log`
   already does it;
-- **search-to-hunk** (ANT-60): `-a` matches should open where they matched;
+- **search-to-hunk** (done 0.6.0, ANT-60): `-a` matches open where they matched;
 - **diff pane line keys** (done 0.5.0, ANT-73): arrows scroll lines, `n`/`p`
   keep hunks;
 - **the e2e gate is blocking** (done 0.5.0, ANT-74), with hunk-navigation and
@@ -28,6 +28,10 @@ believe it works:
 Release criterion: `npm run e2e` green on the bench VM **and** in CI, the
 installer from CI runs on the colleague's machine, and the issues above are
 closed. Anything else is post-v1.
+
+Versions stay **0.x** for now (owner's call, 2026-11-16): the milestone is called
+*v1.0 — releasable*, but the app ships 0.5.x / 0.6.x until the owner says
+otherwise. A cleared milestone is not a 1.0 tag.
 
 Two-endpoint compare **stays in v1.0** (owner's call, 2026-11-15): the
 colleague's cross-root search works, but "what changed between these tips" is

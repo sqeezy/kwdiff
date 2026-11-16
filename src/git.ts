@@ -8,7 +8,13 @@ export type GitApi = Readonly<{
   search: (args: SearchArgs) => Promise<ReadonlyArray<Commit>>
   cancelSearch: (id: number) => Promise<void>
   // `endpoints` set means a tree diff of two tips; null means the ticked shas.
-  files: (shas: ReadonlyArray<string>, endpoints: Endpoints | null) => Promise<ReadonlyArray<FilePatch>>
+  // `needle` (with `regex`) marks the files the code search matched.
+  files: (
+    shas: ReadonlyArray<string>,
+    endpoints: Endpoints | null,
+    needle: string | null,
+    regex: boolean,
+  ) => Promise<ReadonlyArray<FilePatch>>
   patch: (shas: ReadonlyArray<string>, path: string, endpoints: Endpoints | null) => Promise<string>
   roots: (shas: ReadonlyArray<string>, endpoints: Endpoints | null) => Promise<ReadonlyArray<RootOf>>
 }>

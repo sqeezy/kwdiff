@@ -126,13 +126,15 @@ export const LoadSelection = Command.define('LoadSelection', {
     shas: Schema.Array(Schema.String),
     from: Schema.NullOr(Schema.String),
     to: Schema.NullOr(Schema.String),
+    needle: Schema.NullOr(Schema.String),
+    regex: Schema.Boolean,
   },
   messages: [Message.SucceededSelection],
-  execute: ({ id, shas, from, to }) => {
+  execute: ({ id, shas, from, to, needle, regex }) => {
     const endpoints = endpointsOf(from, to)
     return Effect.gen(function* () {
       const files = yield* Effect.tryPromise({
-        try: () => gitApi.files(shas, endpoints),
+        try: () => gitApi.files(shas, endpoints, needle, regex),
         catch: error => String(error),
       })
       // In compare mode Rust answers with the roots of the two endpoints, so the
@@ -312,6 +314,36 @@ const selectRange = (model: Model, from: number, to: number) => {
   return withSelection(model, shas)
 }
 
+// The code search's pattern, when there is one: `-a` on, and a keyword to look
+// for. It is what opens a patch at the hunk that matched.
+const needleOf = (model: Model): string | null =>
+  model.code && model.keyword.trim() !== '' ? model.keyword.trim() : null
+
+// The hunk a changed line contains the needle in, or -1. `-a` matched a *line*,
+// so only added and removed lines count — not the file headers, not context.
+export const matchingHunk = (patch: string, needle: string, regex: boolean): number => {
+  let pattern: RegExp | null = null
+  if (regex) {
+    try {
+      pattern = new RegExp(needle, 'i')
+    } catch {
+      return -1
+    }
+  }
+  const lower = needle.toLowerCase()
+  let hunk = -1
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('@@')) {
+      hunk += 1
+      continue
+    }
+    if (hunk < 0 || line.startsWith('+++') || line.startsWith('---')) continue
+    if (!line.startsWith('+') && !line.startsWith('-')) continue
+    if (pattern !== null ? pattern.test(line) : line.toLowerCase().includes(lower)) return hunk
+  }
+  return -1
+}
+
 // One place turns "what the panes should show" into exactly one Command. The
 // generation goes up first, so an answer that is already in flight cannot land
 // on the newer selection or the newer pair of endpoints.
@@ -331,6 +363,8 @@ const reload = (model: Model) => {
         shas: [...next.selectedShas],
         from: next.compare.from,
         to: next.compare.to,
+        needle: needleOf(next),
+        regex: next.filters.regex,
       }),
     ],
   }
@@ -562,14 +596,27 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
           model: modifyFields(withList, { patch: () => null, fileIndex: () => 0 }),
         }
       }
-      const index = Math.min(model.fileIndex, list.length - 1)
+      // A code search matched a line: open the file that contains it, not
+      // whichever path sorts first.
+      const matched = list.findIndex(file => file.matched)
+      const index = matched >= 0 ? matched : Math.min(model.fileIndex, list.length - 1)
       return openFile(withList, index)
     },
 
-    SucceededPatch: ({ id, patch, error }) =>
-      id !== model.patchId
-        ? { model }
-        : { model: modifyFields(model, { patch: () => patch, lastError: () => error }) },
+    SucceededPatch: ({ id, patch, error }) => {
+      if (id !== model.patchId) return { model }
+      const next = modifyFields(model, { patch: () => patch, lastError: () => error })
+      const needle = needleOf(model)
+      if (needle === null || patch === '' || error !== null) return { model: next }
+      // `-a` matched a changed line: open the patch where it matched, and let
+      // the active-hunk highlight mark it.
+      const hunk = matchingHunk(patch, needle, model.filters.regex)
+      if (hunk < 0) return { model: next }
+      return {
+        model: modifyFields(next, { hunkIndex: () => hunk }),
+        commands: [ScrollToHunk({ index: hunk })],
+      }
+    },
 
     ClickedCommit: ({ index }) => {
       if (model.shiftDown && model.anchor !== null) {

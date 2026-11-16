@@ -55,6 +55,9 @@ pub struct FilePatch {
     pub added: u32,
     pub removed: u32,
     pub is_new: bool,
+    /// The code search's pattern occurs in this file **at the commit**, so the
+    /// patch pane can open at the hunk that matched instead of line 1.
+    pub matched: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -409,14 +412,42 @@ pub async fn cancel_search(state: tauri::State<'_, GitState>, _id: u64) -> Resul
     Ok(())
 }
 
+// Which paths of a commit contain the pattern. `git grep <rev>` searches the
+// tree at that commit, which is where an added line lives; a keyword that only
+// occurs in a *removed* line is not listed here, and the patch scan still finds
+// it once that file is open. Exit code 1 means "no match", not a failure.
+async fn grep_paths(repo: &str, sha: &str, pattern: &str) -> Result<Vec<String>, GitError> {
+    let out = base(repo)
+        .args(["grep", "-l", "-i", "-E", "-e", pattern, sha, "--"])
+        .output()
+        .await
+        .map_err(io_error)?;
+    if !out.status.success() && out.status.code() != Some(1) {
+        return Err(GitError::Io {
+            message: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.split_once(':').map(|(_, path)| path.to_string()))
+        .collect())
+}
+
 #[tauri::command]
 pub async fn files(
     state: tauri::State<'_, GitState>,
     shas: Vec<String>,
     from: Option<String>,
     to: Option<String>,
+    needle: Option<String>,
+    regex: bool,
 ) -> Result<Vec<FilePatch>, GitError> {
     let repo = repo_of(&state).await?;
+    let pattern = needle
+        .as_deref()
+        .map(str::trim)
+        .filter(|needle| !needle.is_empty())
+        .map(|needle| if regex { needle.to_string() } else { literal(needle) });
 
     // A tree diff with no ancestry: this is the whole of two-endpoint compare.
     if let Some((from, to)) = endpoints(&from, &to)? {
@@ -438,6 +469,7 @@ pub async fn files(
                 added,
                 removed,
                 is_new: added > 0 && removed == 0,
+                matched: false,
             })
             .collect());
     }
@@ -454,17 +486,24 @@ pub async fn files(
             ],
         )
         .await?;
+        let matched = match &pattern {
+            Some(pattern) => grep_paths(&repo, sha, pattern).await?,
+            None => Vec::new(),
+        };
         for (added, removed, path) in numstat(&raw) {
+            let hit = matched.iter().any(|candidate| candidate == &path);
             match files.iter_mut().find(|file| file.path == path) {
                 Some(existing) => {
                     existing.added += added;
                     existing.removed += removed;
+                    existing.matched = existing.matched || hit;
                 }
                 None => files.push(FilePatch {
                     path,
                     added,
                     removed,
                     is_new: added > 0 && removed == 0,
+                    matched: hit,
                 }),
             }
         }

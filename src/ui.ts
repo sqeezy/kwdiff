@@ -176,6 +176,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         h.button(
           [
             h.OnClick(Message.ToggledCode()),
+            h.Attribute('id', 'code-toggle'),
             h.Attribute('aria-pressed', model.code ? 'true' : 'false'),
             h.Class(
               `rounded border px-1.5 py-1 font-mono text-[11px] ${
@@ -462,6 +463,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                     ),
                   ],
                   [
+                    file.matched
+                      ? h.span(
+                          [
+                            h.Attribute('aria-label', 'the code search matched a changed line here'),
+                            h.Attribute('title', 'the code search matched a changed line here'),
+                            h.Class('shrink-0 text-[10.5px] text-[#3fb950]'),
+                          ],
+                          ['•'],
+                        )
+                      : h.span([]),
                     h.span([h.Class('truncate')], [file.path.replace(/^src\//, '')]),
                     h.span([h.Class('ml-auto shrink-0 text-[10.5px] text-[#3fb950]')], [`+${file.added}`]),
                     h.span([h.Class('shrink-0 text-[10.5px] text-[#f85149]')], [`−${file.removed}`]),
