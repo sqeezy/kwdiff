@@ -205,7 +205,83 @@ async function main() {
     )
     check('PageDown scrolls the patch', scrolled > 0, `scrollTop=${scrolled}`)
 
-    // 5. Two-endpoint compare: two refs in the two slots are `git diff A B`,
+    // 5. Inside the diff: a file click loads that file's patch, arrows scroll
+    //    lines without stepping hunks, n/p step hunks. The active hunk is the
+    //    model's hunkIndex as the view paints it.
+    const activeIdScript =
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"'
+    const hunkState = `
+      const hunks = [...document.querySelectorAll('[id^="hunk-"]')];
+      return {
+        count: hunks.length,
+        active: hunks.findIndex(el => (el.getAttribute("class") || "").includes("1d3350")),
+        top: document.getElementById("diff-pane")?.scrollTop ?? -1,
+      };
+    `
+
+    const appFile = await exec(`
+      const rows = [...document.querySelectorAll("#file-list li")];
+      const index = rows.findIndex(li => (li.textContent || "").includes("app.ts"));
+      if (index < 0) return -1;
+      rows[index].querySelector("button").click();
+      return index;
+    `)
+    check('the ticked commit has an app.ts file to click', appFile >= 0, `index=${appFile}`)
+    const appPatch = await waitFor(
+      'return (document.getElementById("diff-pane")?.textContent ?? "").includes("diff --git a/src/app.ts")',
+      value => value === true,
+      20000,
+    )
+    check('clicking a file loads its patch', appPatch === true)
+
+    const hunks = await waitFor(
+      'return document.querySelectorAll(\'[id^="hunk-"]\').length',
+      value => value >= 2,
+      20000,
+    )
+    check('the file has more than one hunk', hunks >= 2, `hunks=${hunks}`)
+
+    // A click moved focus onto the file row; Tab from the diff focuses the pane.
+    await press('Tab')
+    const paneFocus = await waitFor(activeIdScript, value => value === 'diff-pane', 5000)
+    check('the diff pane holds focus', paneFocus === 'diff-pane', `focus=${paneFocus}`)
+
+    const beforeLine = await exec('return document.getElementById("diff-pane")?.scrollTop ?? -1')
+    await press('Down')
+    await sleep(250)
+    const afterLine = await exec('return document.getElementById("diff-pane")?.scrollTop ?? -1')
+    check(
+      'an arrow scrolls about one line',
+      afterLine > beforeLine && afterLine - beforeLine <= 40,
+      `scrollTop ${beforeLine} → ${afterLine}`,
+    )
+
+    const stillFirst = await exec(hunkState)
+    check('arrows do not step hunks', stillFirst.active === 0, `active=${stillFirst.active}`)
+
+    await press('n')
+    const afterN = await waitFor(hunkState, value => value?.active === 1, 5000)
+    check('n steps to the next hunk', afterN.active === 1, `active=${afterN.active} of ${afterN.count}`)
+
+    await press('p')
+    const afterP = await waitFor(hunkState, value => value?.active === 0, 5000)
+    check('p steps back', afterP.active === 0, `active=${afterP.active}`)
+
+    // Escape walks the panes back: diff → files → commits → out of the field.
+    await press('Escape')
+    const backToFiles = await waitFor(activeIdScript, value => value === 'file-list', 5000)
+    check('escape walks back to the files', backToFiles === 'file-list', `focus=${backToFiles}`)
+    await press('Escape')
+    const backToCommits = await waitFor(activeIdScript, value => value === 'commit-list', 5000)
+    check('escape walks back to the commits', backToCommits === 'commit-list', `focus=${backToCommits}`)
+    await press('Escape')
+    const backToSearch = await waitFor(activeIdScript, value => value === 'kw-search', 5000)
+    check('escape walks back to the search field', backToSearch === 'kw-search', `focus=${backToSearch}`)
+    await press('Escape')
+    const outOfField = await waitFor(activeIdScript, value => value === 'BODY', 5000)
+    check('a second escape leaves the field', outOfField === 'BODY', `focus=${outOfField}`)
+
+    // 6. Two-endpoint compare: two refs in the two slots are `git diff A B`,
     //    a tree diff that needs no common ancestor, in the same panes. The
     //    ticks are kept (not applied) while it is on.
     const refs = await exec(

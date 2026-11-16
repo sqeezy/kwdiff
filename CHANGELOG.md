@@ -16,6 +16,15 @@ All notable changes to this project are documented here. The format follows
   the pane is one `<pre>` scroller — so the model does not change on every key;
   the hunk the keyboard is on stays where it was until `n`/`p` moves it.
 
+### Tests
+
+- **The e2e is a gate** (ANT-74): `continue-on-error` is gone, so a red window
+  test fails the build — proven in the PR with a deliberately broken assertion.
+  The smoke grew from 18 to 38 checks: clicking a file loads that file's patch,
+  an arrow scrolls about a line and does *not* step the hunk, `n`/`p` move the
+  active hunk, and `esc` walks diff → files → commits → search → out of the
+  field.
+
 ### Removed
 
 - `happy-dom` from the dev dependencies (ANT-62). It was only an *optional peer*

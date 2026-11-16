@@ -200,6 +200,11 @@ virtualisation in v1; the cap is the strategy.
   escaping for literals, an author pattern only when regex is on, the
   `until`-covers-its-day rule, and the pathspec after `--`. A fixture-repository
   suite is still missing (the spec claimed one before it existed).
+- The e2e (`e2e/smoke.mjs`) drives the real window through `tauri-driver` and is
+  **a gate**: 38 checks over the commit list, search, ticks, the patch pane (one
+  scroller, PageDown), a file click, line scrolling and hunk stepping, the pane
+  walk with `tab`/`esc`, two-endpoint compare and filters. A red run fails the
+  build.
 - CI on Windows: both suites, `npm run build`, `tauri build`, and a check that
   `__setDevToolsOverlay` is absent from `dist` (the runtime's own
   `foldkit-devtools` element id is not the overlay).

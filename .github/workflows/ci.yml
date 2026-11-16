@@ -52,10 +52,10 @@ jobs:
         run: npm run tauri build
 
       # The e2e drives the real window, so it needs a desktop session: GitHub's
-      # Windows runners have one, but a headless agent does not. Non-blocking
-      # until it has proven itself on this runner a few times.
-      - name: e2e smoke (window, keyboard, scroll)
-        continue-on-error: true
+      # Windows runners have one. It is a gate now — a red e2e fails the build,
+      # which is what makes it worth the minutes. Proven by a deliberately
+      # broken assertion in the branch that added this step.
+      - name: e2e gate (window, keyboard, scroll, hunks)
         shell: bash
         run: |
           cargo install tauri-driver --locked
