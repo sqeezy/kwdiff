@@ -3,13 +3,18 @@
 //   node e2e/smoke.mjs
 //
 // Needs tauri-driver and msedgedriver on PATH (or TAURI_DRIVER / MSEDGEDRIVER),
-// and a built app (npm run tauri build). No test framework: a session, a few
-// assertions, a non-zero exit code. On Windows the whole thing has to run in
-// the interactive desktop session — a scheduled task with /IT, or `npm run e2e`
-// from a terminal.
-import { spawn } from 'node:child_process'
+// git on PATH, and a built app (npm run tauri build). No test framework: a
+// session, a few assertions, a non-zero exit code. On Windows the whole thing
+// has to run in the interactive desktop session — a scheduled task with /IT, or
+// `npm run e2e` from a terminal.
+//
+// The app is pointed at a repository this script builds from nothing, so a run
+// means the same thing on a bench VM, on a CI runner and on a laptop: no
+// checkout, clone depth or existing config can change the outcome.
+import { execFileSync, spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const BASE = 'http://127.0.0.1:4444'
@@ -27,6 +32,84 @@ const check = (name, ok, detail = '') => {
     failures += 1
     console.log(`FAIL ${name}${detail ? `  (${detail})` : ''}`)
   }
+}
+
+// ---- the repository under test ---------------------------------------------
+//
+// Built here, every run: two authors (one is dependabot, so the author filter
+// has something to narrow to), a tag two commits behind, more than ten commits,
+// and one commit whose src/app.ts patch has three hunks and is taller than the
+// pane. Nothing about a run depends on which clone or config the machine has.
+const git = (cwd, args, env = {}) =>
+  execFileSync('git', args, { cwd, stdio: 'pipe', env: { ...process.env, ...env } })
+
+const ANTON = { GIT_AUTHOR_NAME: 'Anton Herzog', GIT_AUTHOR_EMAIL: 'anton@example.com' }
+const BOT = {
+  GIT_AUTHOR_NAME: 'dependabot[bot]',
+  GIT_AUTHOR_EMAIL: '49699333+dependabot[bot]@users.noreply.github.com',
+}
+
+const fixtureRepo = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kwdiff-e2e-'))
+  git(dir, ['init', '-q', '-b', 'main'])
+  git(dir, ['config', 'user.name', 'Anton Herzog'])
+  git(dir, ['config', 'user.email', 'anton@example.com'])
+  git(dir, ['config', 'commit.gpgsign', 'false'])
+
+  const write = (path, lines) => {
+    mkdirSync(dirname(join(dir, path)), { recursive: true })
+    writeFileSync(join(dir, path), `${lines.join('\n')}\n`)
+  }
+  const commit = (subject, date, author = ANTON) => {
+    git(dir, ['add', '-A'])
+    git(dir, ['commit', '-q', '-m', subject], {
+      ...author,
+      GIT_AUTHOR_DATE: date,
+      GIT_COMMITTER_DATE: date,
+    })
+  }
+
+  const app = Array.from({ length: 60 }, (_, i) => `export const route${i} = () => '/r/${i}'`)
+  write('src/app.ts', app)
+  write('src/ui.ts', ['export const view = () => null'])
+  write('package.json', ['{', '  "name": "fixture",', '  "version": "0.1.0"', '}'])
+  write('README.md', ['# fixture'])
+  commit('chore: initial layout', '2026-01-05T09:00:00')
+  git(dir, ['tag', 'v0.1.0'])
+
+  for (let i = 1; i <= 10; i += 1) {
+    write(`src/feature-${i}.ts`, [`export const feature${i} = () => ${i}`])
+    commit(`feat: feature ${i}`, `2026-01-${String(5 + i).padStart(2, '0')}T09:00:00`)
+  }
+
+  write('src/http/retry.ts', ['export const retry = () => 1'])
+  commit('fix: retry once on gateway 502', '2026-01-16T09:00:00')
+
+  write('package.json', ['{', '  "name": "fixture",', '  "version": "0.1.1"', '}'])
+  commit('chore(deps): bump effect to 4.1.4', '2026-01-17T09:00:00', BOT)
+
+  const taller = app.map((line, i) =>
+    i === 4 ? "export const route4 = () => '/changed/4'" : i === 29 ? '// moved' : line,
+  )
+  taller.push(...Array.from({ length: 200 }, (_, i) => `export const extra${i} = ${i}`))
+  write('src/app.ts', taller)
+  write('src/ui.ts', ['export const view = () => "pierre"'])
+  commit("feat: render the patch with Pierre's CodeView", '2026-01-18T09:00:00')
+
+  return dir
+}
+
+// The app opens `last` on launch: point it at the fixture, in the app-data dir
+// the release build uses, with forward slashes as the app writes them.
+const seedConfig = repo => {
+  const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  const dir = join(appData, 'dev.sqeezy.kwdiff')
+  mkdirSync(dir, { recursive: true })
+  const path = repo.split('\\').join('/')
+  writeFileSync(
+    join(dir, 'config.json'),
+    JSON.stringify({ recents: [path], last: path, branches: [] }, null, 2),
+  )
 }
 
 async function http(path, method = 'GET', body) {
@@ -57,6 +140,10 @@ const KEYS = {
 
 async function main() {
   if (!existsSync(APP)) throw new Error(`app not built: ${APP}`)
+
+  const repo = fixtureRepo()
+  seedConfig(repo)
+  console.log(`     fixture repository: ${repo}`)
 
   const driver = spawn(DRIVER, ['--native-driver', NATIVE], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -491,6 +578,7 @@ async function main() {
     await http(`/session/${sid}`, 'DELETE')
   } finally {
     driver.kill()
+    if (failures === 0) rmSync(repo, { recursive: true, force: true })
   }
 
   console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`)
