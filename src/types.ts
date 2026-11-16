@@ -22,6 +22,10 @@ export type GitErrorKind = 'git-missing' | 'not-a-repo' | 'search' | 'io'
 
 export type GitError = Readonly<{ kind: GitErrorKind; message: string }>
 
+// Two endpoints and nothing else: what the file list, the patch and the roots
+// are computed from while comparing. Null means "use the ticks".
+export type Endpoints = Readonly<{ from: string; to: string }>
+
 export type SearchArgs = Readonly<{
   id: number
   repo: string

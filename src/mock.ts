@@ -1,6 +1,6 @@
 // Fixture repository for the browser dev server and the tests. Same shapes the
 // Rust side returns: two unrelated roots, one keyword on each, one file on both.
-import type { Commit, Config, FilePatch, Ref, Repo, RootOf, SearchArgs } from './types'
+import type { Commit, Config, Endpoints, FilePatch, Ref, Repo, RootOf, SearchArgs } from './types'
 import type { GitApi } from './git'
 
 type Fixture = Readonly<{
@@ -314,6 +314,22 @@ const newestFirst = (a: Fixture, b: Fixture) => (a.date < b.date ? 1 : a.date > 
 
 const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
+// A tree at an endpoint: the latest patch for each path among the fixture
+// commits that the endpoint names, by sha or by carrying its branch. The
+// fixture has patches, not trees, so a compare here is the difference between
+// two such maps — enough to drive the browser dev server, nothing more.
+const treeAt = (endpoint: string): ReadonlyMap<string, FilePatch & { patch: string }> => {
+  const commits = fixtures
+    .filter(f => f.sha === endpoint || f.branches.includes(endpoint))
+    .sort(newestFirst)
+    .reverse()
+  const tree = new Map<string, FilePatch & { patch: string }>()
+  for (const commit of commits) {
+    for (const file of commit.files) tree.set(file.path, file)
+  }
+  return tree
+}
+
 export const mockGit: GitApi = {
   openRepo: async (path: string): Promise<Repo> => {
     await delay(40)
@@ -345,7 +361,30 @@ export const mockGit: GitApi = {
 
   cancelSearch: async () => {},
 
-  files: async (shas: ReadonlyArray<string>): Promise<ReadonlyArray<FilePatch>> => {
+  files: async (
+    shas: ReadonlyArray<string>,
+    endpoints: Endpoints | null,
+  ): Promise<ReadonlyArray<FilePatch>> => {
+    if (endpoints !== null) {
+      const from = treeAt(endpoints.from)
+      const to = treeAt(endpoints.to)
+      const compared: FilePatch[] = []
+      for (const [path, file] of to) {
+        const before = from.get(path)
+        if (before !== undefined && before.patch === file.patch) continue
+        compared.push({
+          path,
+          added: file.added,
+          removed: before === undefined ? 0 : file.removed,
+          isNew: before === undefined,
+        })
+      }
+      for (const [path, file] of from) {
+        if (to.has(path)) continue
+        compared.push({ path, added: 0, removed: file.added, isNew: false })
+      }
+      return compared.sort((a, b) => a.path.localeCompare(b.path))
+    }
     const byPath = new Map<string, FilePatch>()
     for (const f of fixtures) {
       if (!shas.includes(f.sha)) continue
@@ -367,7 +406,22 @@ export const mockGit: GitApi = {
     return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path))
   },
 
-  patch: async (shas: ReadonlyArray<string>, path: string): Promise<string> => {
+  patch: async (
+    shas: ReadonlyArray<string>,
+    path: string,
+    endpoints: Endpoints | null,
+  ): Promise<string> => {
+    if (endpoints !== null) {
+      const to = treeAt(endpoints.to).get(path)
+      const from = treeAt(endpoints.from).get(path)
+      const body = to ?? from
+      if (body === undefined) return ''
+      return [
+        `# ${endpoints.from} → ${endpoints.to}`,
+        `diff --git a/${path} b/${path}`,
+        body.patch,
+      ].join('\n')
+    }
     const parts: string[] = []
     for (const f of [...fixtures].filter(x => shas.includes(x.sha)).sort(newestFirst).reverse()) {
       for (const file of f.files) {
@@ -378,10 +432,26 @@ export const mockGit: GitApi = {
     return parts.join('\n')
   },
 
-  roots: async (shas: ReadonlyArray<string>): Promise<ReadonlyArray<RootOf>> =>
-    fixtures
+  roots: async (
+    shas: ReadonlyArray<string>,
+    endpoints: Endpoints | null,
+  ): Promise<ReadonlyArray<RootOf>> => {
+    if (endpoints !== null) {
+      return [endpoints.from, endpoints.to].flatMap(value => {
+        const roots = new Set(
+          fixtures
+            .filter(f => f.sha === value || f.branches.includes(value))
+            .map(f => f.root),
+        )
+        return roots.size === 0
+          ? [{ sha: value, root: value }]
+          : [...roots].map(root => ({ sha: value, root }))
+      })
+    }
+    return fixtures
       .filter(f => shas.includes(f.sha))
-      .map(f => ({ sha: f.sha, root: f.root })),
+      .map(f => ({ sha: f.sha, root: f.root }))
+  },
 }
 
 // The fixture keeps config in memory: the browser has no app data dir.

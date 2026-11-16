@@ -18,8 +18,8 @@ patches together, because a patch is computed against a commit's own parent.
 
 **In v1** — open repository (any subfolder, resolved to the root), recents,
 keyword search over messages, `-a` code search checkbox, branch filter, commit
-checklist, file list, per-file patch pane, six non-content states, keyboard
-accelerators.
+checklist, file list, per-file patch pane, **two-endpoint compare**, six
+non-content states, keyboard accelerators.
 
 **Out of v1** — export or copy of any patch; review notes (map #2); staging,
 committing, merging, rebasing; commit graph, blame; plugins; i18n; telemetry;
@@ -35,7 +35,13 @@ tabs or multiple repositories; macOS/Linux; code signing; auto-update.
 3. Tick commits: the file pane lists the union of their files with added and
    removed counts; the diff pane shows the selected file's patch. A divider
    appears when the selection's commits share no ancestor.
-4. Read. v1 has no output.
+4. Compare two tips: pick a ref in each of the two slots beside the search
+   field, or press `f` / `t` to put the commit under the cursor into the from /
+   to slot. With both set the panes show `git diff A B` — a tree diff that
+   needs no ancestor — and the same file list and patch pane are reused. The
+   empty entry in a slot returns to the ticks, which were kept, not cleared;
+   while comparing, a tick changes the checklist and nothing else.
+5. Read. v1 has no output.
 
 ## Architecture
 
@@ -68,13 +74,22 @@ Tauri 2 (Windows x64, WebView2)
     -> Result<Vec<Commit>, GitError>;
 #[tauri::command] async fn cancel_search(state: State<'_, GitState>, id: u64)
     -> Result<(), GitError>;
-#[tauri::command] async fn patch(state: State<'_, GitState>,
-    sha: String, path: String) -> Result<tauri::ipc::Response, GitError>;
-#[tauri::command] async fn roots(state: State<'_, GitState>, shas: Vec<String>)
-    -> Result<Vec<RootOf>, GitError>;
+#[tauri::command] async fn files(state: State<'_, GitState>, shas: Vec<String>,
+    from: Option<String>, to: Option<String>) -> Result<Vec<FilePatch>, GitError>;
+#[tauri::command] async fn patch(state: State<'_, GitState>, shas: Vec<String>,
+    path: String, from: Option<String>, to: Option<String>)
+    -> Result<tauri::ipc::Response, GitError>;
+#[tauri::command] async fn roots(state: State<'_, GitState>, shas: Vec<String>,
+    from: Option<String>, to: Option<String>) -> Result<Vec<RootOf>, GitError>;
 #[tauri::command] async fn refs(repo: String) -> Result<Vec<Ref>, GitError>;
 ```
 
+- `files`, `patch` and `roots` take the pair. Both endpoints set is a tree
+  diff: `git diff --no-renames A B`, `--numstat` for the list and per path for
+  the patch. One endpoint alone is refused (`compare needs two endpoints`),
+  because `git diff A` would silently mean *A against the worktree*.
+  `--no-renames` keeps a rename as a delete plus an add, so every path in the
+  list is a path the patch command can answer for.
 - `GitState` holds `Mutex<Option<(u64, tokio::process::Child)>>`. A `search`
   with a newer `id` kills the previous child; `cancel_search` does the same on
   demand; both `kill().await` then `wait().await` to reap.
@@ -107,6 +122,11 @@ filter, the ref replaces `--all`. Matching is case-insensitive over the message.
 "these commits share no ancestor" — only when the selection spans more than one
 root.
 
+In compare mode the roots are asked for the two endpoints instead: the same root
+means they share an ancestor, two roots mean they cannot, and that is exactly
+when the divider is shown. A tree diff needs no ancestor either way, so the
+comparison itself never fails on unrelated roots.
+
 ## States
 
 | State | Where | Action |
@@ -123,14 +143,16 @@ Artifact: `docs/wayfinder/prototypes/non-content-states.html`.
 ## Keyboard
 
 `/` focus search · `j`/`k` next/previous commit · `space` toggle ·
-`enter` focus the diff · `esc` leave the field. Never bind `Mod+F`, `Mod+P`,
-`Mod+R`, `F5` (WebView2 accelerators cannot be disabled).
+`enter` focus the diff · `esc` leave the field · `f`/`t` use the commit under
+the cursor as the compare from/to endpoint · `x` swap the endpoints. Never bind
+`Mod+F`, `Mod+P`, `Mod+R`, `F5` (WebView2 accelerators cannot be disabled).
 
 ## Config
 
 One JSON file in the app data dir: `recents` (up to 10 repository roots),
 `lastRepo`, per-repository `branch`. A deleted or unfetched ref falls back to
-*All refs*.
+*All refs*. The compare endpoints are **not** persisted: they name refs of the
+repository that is open, and a fresh window starts on the ticks.
 
 ## Performance
 
@@ -141,7 +163,10 @@ virtualisation in v1; the cap is the strategy.
 ## Tests
 
 - Foldkit story tests over `update`: toggle, select-all/none, keyword filter,
-  branch filter keeping ticks, roots split, states, cancelled search.
+  branch filter keeping ticks, roots split, states, cancelled search,
+  two-endpoint compare (one slot is inert, two replace the ticks, clearing
+  returns to them, ticking while comparing does not reload, a stale selection
+  answer never lands).
 - Rust tests against a fixture repository built in the test: two orphan roots, a
   merge, a file on both, a keyword hit on each root.
 - CI on Windows: both suites, `npm run build`, `tauri build`, and a check that

@@ -10,6 +10,11 @@ SVN import sitting next to `main` — tick the commits that belong together, and
 read their patches side by side. A patch is computed against a commit's own
 parent, so no merge base is needed anywhere.
 
+And for the question that comes right after: pick two tips in the two slots
+beside the search field (or `f` / `t` for the commit under the cursor) and read
+`git diff A B` — the same file list and patch pane, a tree diff that needs no
+common ancestor at all.
+
 ## Why
 
 ```
@@ -68,8 +73,9 @@ docs/wayfinder/ the decision map this was built from
 
 ## Status
 
-v1 in progress. The UI, the update loop and its 14 story tests run today; the
-Rust side is written and gets its first build in Windows CI.
+v1 in progress. Search, the commit checklist with range selection, pane and hunk
+navigation, and two-endpoint compare work today, against 39 story tests and an
+e2e smoke over the real window that CI runs.
 
 ## License
 

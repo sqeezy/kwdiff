@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
+### Added
+
+- **Two-endpoint compare** (ANT-66): two slots beside the search field diff any
+  two tips — refs from the slots, or the commit under the cursor with `f` / `t`;
+  `x` swaps them. With both set the panes show `git diff A B`, a tree diff that
+  needs no common ancestor, reusing the file list, the patch pane and the roots
+  divider (two different roots mean the endpoints cannot share one). The empty
+  entry in a slot returns to the ticks, which are kept rather than cleared;
+  ticking while comparing changes the checklist and nothing else. 8 story tests
+  (39 total), and `npm run e2e` covers the compare path on the bench VM.
+- Selection loads carry a generation (`selectionId`), so an answer for an older
+  selection, or for an older pair of endpoints, is dropped instead of landing
+  late.
+
+### Fixed
+
+- `npm run e2e` no longer flakes on the scroll assertion: it waits for each pane
+  to actually hold focus, which arrives from a Command after the keypress,
+  instead of assuming the keys were enough.
+
+### Changed
+
+- `files`, `patch` and `roots` take the two endpoints. Rust refuses a single
+  one, because `git diff A` would silently mean *A against the worktree*.
+  Compare paths pass `--no-renames`, so a rename stays a delete plus an add and
+  every path in the list is a path the patch pane can answer for.
+
 ## [0.2.10] - 2026-11-16
 
 ### Added

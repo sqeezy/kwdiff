@@ -34,17 +34,20 @@ const base: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  compare: { from: null, to: null },
   searching: false,
   searchId: 1,
+  selectionId: 0,
   patchId: 0,
   error: null,
 }
 
 // A selection change loads the file list and the roots in one Command; an
-// empty answer ends the cascade.
+// empty answer ends the cascade. Reloading bumps the generation to 1, so the
+// resolved message carries it — an older one is dropped in update.
 const selectionResolved = Command.resolve(
   LoadSelection,
-  Message.SucceededSelection({ files: [], roots: [], error: null }),
+  Message.SucceededSelection({ id: 1, files: [], roots: [], error: null }),
 )
 
 // The debounce is resolved with a stale id, so update drops it and asks for
@@ -191,7 +194,7 @@ describe('files and roots', () => {
     story(
       update,
       given({ ...base, files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false }], patch: 'x' }),
-      message(Message.SucceededSelection({ files: [], roots: [], error: null })),
+      message(Message.SucceededSelection({ id: 0, files: [], roots: [], error: null })),
       model(m => {
         expect(m.files).toEqual([])
         expect(m.patch).toBeNull()
@@ -207,7 +210,7 @@ describe('files and roots', () => {
     story(
       update,
       given({ ...base, fileIndex: 3, patchId: 7, files }),
-      message(Message.SucceededSelection({ files, roots: [], error: null })),
+      message(Message.SucceededSelection({ id: 0, files, roots: [], error: null })),
       Command.resolve(LoadPatch, Message.SucceededPatch({ id: 8, patch: '', error: null })),
       model(m => {
         expect(m.fileIndex).toBe(1)
@@ -220,7 +223,7 @@ describe('files and roots', () => {
     story(
       update,
       given(base),
-      message(Message.SucceededSelection({ files: [], roots: ['root-1', 'root-2', 'root-1'], error: null })),
+      message(Message.SucceededSelection({ id: 0, files: [], roots: ['root-1', 'root-2', 'root-1'], error: null })),
       model(m => {
         expect(m.roots).toEqual(['root-1', 'root-2'])
       }),
@@ -231,7 +234,7 @@ describe('files and roots', () => {
     story(
       update,
       given(base),
-      message(Message.SucceededSelection({ files: [], roots: ['root-1'], error: null })),
+      message(Message.SucceededSelection({ id: 0, files: [], roots: ['root-1'], error: null })),
       model(m => {
         expect(m.roots.length).toBe(1)
       }),
@@ -290,7 +293,7 @@ describe('failures are visible', () => {
       update,
       given(base),
       message(
-        Message.SucceededSelection({ files: [], roots: [], error: 'fatal: not a git repository' }),
+        Message.SucceededSelection({ id: 0, files: [], roots: [], error: 'fatal: not a git repository' }),
       ),
       model(m => {
         expect(m.lastError).toBe('fatal: not a git repository')
@@ -303,7 +306,7 @@ describe('failures are visible', () => {
     story(
       update,
       given({ ...base, lastError: 'old' }),
-      message(Message.SucceededSelection({ files: [], roots: [], error: null })),
+      message(Message.SucceededSelection({ id: 0, files: [], roots: [], error: null })),
       model(m => {
         expect(m.lastError).toBeNull()
       }),
@@ -416,7 +419,7 @@ describe('range selection', () => {
       update,
       given(base),
       message(Message.ClickedCommit({ index: 1 })),
-      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ id: 1, files: [], roots: [], error: null })),
       model(m => {
         expect(m.selectedShas).toEqual(['e3f1a07'])
         expect(m.anchor).toBe(1)
@@ -429,7 +432,7 @@ describe('range selection', () => {
       update,
       given({ ...base, shiftDown: true, anchor: 0, cursor: 0 }),
       message(Message.ClickedCommit({ index: 1 })),
-      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ id: 1, files: [], roots: [], error: null })),
       model(m => {
         expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
       }),
@@ -441,7 +444,7 @@ describe('range selection', () => {
       update,
       given({ ...base, shiftDown: true, anchor: 1, cursor: 1 }),
       message(Message.ClickedCommit({ index: 0 })),
-      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ id: 1, files: [], roots: [], error: null })),
       model(m => {
         expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
       }),
@@ -453,7 +456,7 @@ describe('range selection', () => {
       update,
       given({ ...base, pane: 'commits', shiftDown: true, anchor: 0, cursor: 0 }),
       message(Message.MovedInPane({ delta: 1 })),
-      Command.resolve(LoadSelection, Message.SucceededSelection({ files: [], roots: [], error: null })),
+      Command.resolve(LoadSelection, Message.SucceededSelection({ id: 1, files: [], roots: [], error: null })),
       model(m => {
         expect(m.selectedShas).toEqual(['c1a4f2e', 'e3f1a07'])
         expect(m.cursor).toBe(1)
@@ -467,6 +470,133 @@ describe('range selection', () => {
       given({ ...base, shiftDown: true }),
       message(Message.ShiftUp()),
       model(m => expect(m.shiftDown).toBe(false)),
+    )
+  })
+})
+
+// Two endpoints are a tree diff: `git diff A B` needs no common ancestor, which
+// is why it is the one thing every other viewer cannot do here.
+describe('two-endpoint compare', () => {
+  const reloaded = Command.resolve(
+    LoadSelection,
+    Message.SucceededSelection({ id: 1, files: [], roots: [], error: null }),
+  )
+
+  test('one slot alone leaves the tick panes alone', () => {
+    story(
+      update,
+      given({
+        ...base,
+        files: [{ path: 'a.ts', added: 1, removed: 0, isNew: false }],
+        patch: 'the ticks',
+        patchId: 4,
+      }),
+      message(Message.ChoseEndpoint({ slot: 'from', value: 'main' })),
+      model(m => {
+        expect(m.compare).toEqual({ from: 'main', to: null })
+        expect(m.patch).toBe('the ticks')
+        expect(m.patchId).toBe(4)
+      }),
+    )
+  })
+
+  test('both slots replace the ticks with the tree diff', () => {
+    story(
+      update,
+      given({ ...base, selectedShas: ['c1a4f2e'] }),
+      message(Message.ChoseEndpoint({ slot: 'from', value: 'main' })),
+      message(Message.ChoseEndpoint({ slot: 'to', value: 'svn/legacy' })),
+      reloaded,
+      model(m => {
+        expect(m.compare).toEqual({ from: 'main', to: 'svn/legacy' })
+        expect(m.selectionId).toBe(1)
+        // The ticks survive, so clearing a slot returns to them unchanged.
+        expect(m.selectedShas).toEqual(['c1a4f2e'])
+      }),
+    )
+  })
+
+  test('clearing a slot returns the panes to the ticks', () => {
+    story(
+      update,
+      given({
+        ...base,
+        compare: { from: 'main', to: 'svn/legacy' },
+        selectedShas: ['c1a4f2e'],
+      }),
+      message(Message.ChoseEndpoint({ slot: 'to', value: null })),
+      reloaded,
+      model(m => {
+        expect(m.compare).toEqual({ from: 'main', to: null })
+        expect(m.selectionId).toBe(1)
+      }),
+    )
+  })
+
+  test('choosing the same endpoint again is not a reload', () => {
+    story(
+      update,
+      given({ ...base, compare: { from: 'main', to: 'svn/legacy' } }),
+      message(Message.ChoseEndpoint({ slot: 'from', value: 'main' })),
+      model(m => {
+        expect(m.compare).toEqual({ from: 'main', to: 'svn/legacy' })
+      }),
+    )
+  })
+
+  test('ticking while comparing leaves the tree diff in place', () => {
+    const files = [{ path: 'a.ts', added: 1, removed: 0, isNew: false }]
+    story(
+      update,
+      given({ ...base, compare: { from: 'main', to: 'svn/legacy' }, files, patch: 'the diff', patchId: 9 }),
+      message(Message.ToggledCommit({ sha: 'c1a4f2e' })),
+      model(m => {
+        expect(m.selectedShas).toEqual(['c1a4f2e'])
+        expect(m.patch).toBe('the diff')
+        expect(m.patchId).toBe(9)
+      }),
+    )
+  })
+
+  test('the commit under the cursor fills a slot', () => {
+    story(
+      update,
+      given({ ...base, compare: { from: 'main', to: null }, cursor: 1 }),
+      message(Message.UsedCommitAsEndpoint({ slot: 'to' })),
+      reloaded,
+      model(m => {
+        expect(m.compare).toEqual({ from: 'main', to: 'e3f1a07' })
+      }),
+    )
+  })
+
+  test('x swaps the endpoints', () => {
+    story(
+      update,
+      given({ ...base, compare: { from: 'main', to: 'svn/legacy' } }),
+      message(Message.SwappedEndpoints()),
+      reloaded,
+      model(m => {
+        expect(m.compare).toEqual({ from: 'svn/legacy', to: 'main' })
+      }),
+    )
+  })
+
+  test('a selection answer from an older generation never lands', () => {
+    story(
+      update,
+      given({ ...base, selectionId: 2 }),
+      message(
+        Message.SucceededSelection({
+          id: 1,
+          files: [{ path: 'stale.ts', added: 1, removed: 0, isNew: true }],
+          roots: [],
+          error: null,
+        }),
+      ),
+      model(m => {
+        expect(m.files).toEqual([])
+      }),
     )
   })
 })
