@@ -140,6 +140,40 @@ async fn kill_current(state: &GitState) {
     }
 }
 
+// Both endpoints or neither. A single one is a UI bug, and git diff would
+// silently read it as "worktree against a commit", which is not what was asked.
+fn endpoints(
+    from: &Option<String>,
+    to: &Option<String>,
+) -> Result<Option<(String, String)>, GitError> {
+    match (from, to) {
+        (None, None) => Ok(None),
+        (Some(from), Some(to)) => Ok(Some((from.clone(), to.clone()))),
+        _ => Err(GitError::Io { message: "compare needs two endpoints".into() }),
+    }
+}
+
+// `git diff --numstat` lines are `added\tremoved\tpath`; a binary file has `-`
+// for both counts. `--no-renames` keeps a rename as a delete plus an add, so
+// the path in the list is always a path the patch command can answer for.
+fn numstat(raw: &str) -> Vec<(u32, u32, String)> {
+    raw.lines()
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            let (Some(added), Some(removed), Some(path)) =
+                (fields.next(), fields.next(), fields.next())
+            else {
+                return None;
+            };
+            Some((
+                added.parse().unwrap_or(0),
+                removed.parse().unwrap_or(0),
+                path.to_string(),
+            ))
+        })
+        .collect()
+}
+
 // Spawns a git process, registers it as the live one, reads it to the end.
 async fn run_tracked(state: &GitState, id: u64, repo: &str, args: &[String]) -> Result<String, GitError> {
     kill_current(state).await;
@@ -299,8 +333,35 @@ pub async fn cancel_search(state: tauri::State<'_, GitState>, _id: u64) -> Resul
 pub async fn files(
     state: tauri::State<'_, GitState>,
     shas: Vec<String>,
+    from: Option<String>,
+    to: Option<String>,
 ) -> Result<Vec<FilePatch>, GitError> {
     let repo = repo_of(&state).await?;
+
+    // A tree diff with no ancestry: this is the whole of two-endpoint compare.
+    if let Some((from, to)) = endpoints(&from, &to)? {
+        let raw = output(
+            &repo,
+            &[
+                "diff".into(),
+                "--numstat".into(),
+                "--no-renames".into(),
+                from,
+                to,
+            ],
+        )
+        .await?;
+        return Ok(numstat(&raw)
+            .into_iter()
+            .map(|(added, removed, path)| FilePatch {
+                path,
+                added,
+                removed,
+                is_new: added > 0 && removed == 0,
+            })
+            .collect());
+    }
+
     let mut files: Vec<FilePatch> = Vec::new();
     for sha in &shas {
         let raw = output(
@@ -313,21 +374,14 @@ pub async fn files(
             ],
         )
         .await?;
-        for line in raw.lines() {
-            let mut fields = line.split('\t');
-            let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next())
-            else {
-                continue;
-            };
-            let added: u32 = added.parse().unwrap_or(0);
-            let removed: u32 = removed.parse().unwrap_or(0);
+        for (added, removed, path) in numstat(&raw) {
             match files.iter_mut().find(|file| file.path == path) {
                 Some(existing) => {
                     existing.added += added;
                     existing.removed += removed;
                 }
                 None => files.push(FilePatch {
-                    path: path.to_string(),
+                    path,
                     added,
                     removed,
                     is_new: added > 0 && removed == 0,
@@ -344,9 +398,31 @@ pub async fn patch(
     state: tauri::State<'_, GitState>,
     shas: Vec<String>,
     path: String,
+    from: Option<String>,
+    to: Option<String>,
 ) -> Result<tauri::ipc::Response, GitError> {
     let repo = repo_of(&state).await?;
     let mut text = String::new();
+
+    if let Some((from, to)) = endpoints(&from, &to)? {
+        text.push_str(&format!("# {from} → {to}\n"));
+        text.push_str(
+            &output(
+                &repo,
+                &[
+                    "diff".into(),
+                    "--no-renames".into(),
+                    from,
+                    to,
+                    "--".into(),
+                    path.clone(),
+                ],
+            )
+            .await?,
+        );
+        return Ok(tauri::ipc::Response::new(text.into_bytes()));
+    }
+
     for sha in &shas {
         text.push_str(&output(
             &repo,
@@ -368,10 +444,18 @@ pub async fn patch(
 pub async fn roots(
     state: tauri::State<'_, GitState>,
     shas: Vec<String>,
+    from: Option<String>,
+    to: Option<String>,
 ) -> Result<Vec<RootOf>, GitError> {
     let repo = repo_of(&state).await?;
+    // Two endpoints with the same root share an ancestor; two different roots
+    // cannot, and that is exactly when the divider is true.
+    let targets = match endpoints(&from, &to)? {
+        Some((from, to)) => vec![from, to],
+        None => shas,
+    };
     let mut roots = Vec::new();
-    for sha in &shas {
+    for sha in &targets {
         let raw = output(
             &repo,
             &["rev-list".into(), "--max-parents=0".into(), sha.clone()],
