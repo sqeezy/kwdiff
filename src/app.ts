@@ -191,6 +191,24 @@ export const FocusSelector = Command.define('FocusSelector', {
     ),
 })
 
+// The diff scrolls by lines: the pane is one <pre>, so the scroll position is
+// the view's, not the model's. n/p keep jumping hunks (ScrollToHunk).
+export const ScrollDiffLines = Command.define('ScrollDiffLines', {
+  args: { delta: Schema.Number },
+  messages: [Message.ScrolledDiffLines],
+  execute: ({ delta }) =>
+    Effect.sync(() => {
+      const pane = document.getElementById('diff-pane')
+      if (pane !== null) {
+        // Read the rendered line height, so a theme change cannot make a
+        // "line" mean something else than a line.
+        const line = Number.parseFloat(getComputedStyle(pane).lineHeight) || 18
+        pane.scrollTop += delta * line
+      }
+      return Message.ScrolledDiffLines({ delta })
+    }),
+})
+
 export // Hunk scrolling talks to the rendered hunk anchors in our own pre.
 const ScrollToHunk = Command.define('ScrollToHunk', {
   args: { index: Schema.Number },
@@ -611,12 +629,8 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
           : { ...outcome, model: modifyFields(outcome.model, { hunkIndex: () => 0 }) }
       }
       if (model.pane === 'diff') {
-        const last = Math.max(0, hunkCount(model.patch) - 1)
-        const index = Math.min(last, Math.max(0, model.hunkIndex + delta))
-        return {
-          model: modifyFields(model, { hunkIndex: () => index }),
-          commands: [ScrollToHunk({ index })],
-        }
+        // Lines, not hunks: n / p stay the hunk keys.
+        return { model, commands: [ScrollDiffLines({ delta })] }
       }
       return { model }
     },
@@ -687,7 +701,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
               },
 
     ScrolledToHunk: () => ({ model }),
-    ScrolledDiff: () => ({ model }),
+    ScrolledDiffLines: () => ({ model }),
     ElementFocused: () => ({ model }),
     DiffMounted: () => ({ model }),
 

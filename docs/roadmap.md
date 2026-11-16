@@ -17,7 +17,8 @@ believe it works:
 - **filters** (done 0.4.0, ANT-64): author, date, path, regex — `git log`
   already does it;
 - **search-to-hunk** (ANT-60): `-a` matches should open where they matched;
-- **diff pane line keys** (ANT-73): arrows scroll lines, `n`/`p` keep hunks;
+- **diff pane line keys** (done 0.5.0, ANT-73): arrows scroll lines, `n`/`p`
+  keep hunks;
 - **the e2e gate is blocking** (ANT-74), with hunk-navigation assertions;
 - **range selection** (done 0.2.10): shift-click selects anchor → row,
   shift+arrow extends it, a plain click toggles and moves the anchor;

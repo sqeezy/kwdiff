@@ -170,6 +170,10 @@ row · `f`/`t` use the commit under the cursor as the compare from/to endpoint �
 `x` swap the endpoints. Never bind `Mod+F`, `Mod+P`, `Mod+R`, `F5` (WebView2
 accelerators cannot be disabled).
 
+In the diff pane `j`/`k` and the arrows scroll by **lines** — the pane is one
+`<pre>` scroller, so scrolling is view state and the model does not change —
+while `n`/`p` step **hunks** and `g`/`shift+g` jump to the first and last.
+
 ## Config
 
 One JSON file in the app data dir: `recents` (up to 10 repository roots),
