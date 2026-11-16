@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-16
+
+### Added
+
+- **Search-to-hunk** (ANT-60): with `-a` on and a keyword, the commit the code
+  search matched opens the file that contains the match (its row carries a dot)
+  and the patch at the **hunk** that matched, marked by the same active-hunk
+  style `n`/`p` use. A keyword that only exists in a *removed* line still opens
+  at the right place once its file is open — `git grep` marks the tree, the
+  patch scan covers both sides. 6 story tests (56 total).
+
 ## [0.5.0] - 2026-11-16
 
 ### Added
