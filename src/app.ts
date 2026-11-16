@@ -7,10 +7,19 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
 import { Message } from './message'
+import { Filters } from './model'
 import type { Model } from './model'
 import type { Endpoints, FilePatch, RootOf } from './types'
 
 const DEBOUNCE = '250 millis'
+
+export const noFilters: typeof Filters.Type = {
+  author: '',
+  path: '',
+  since: '',
+  until: '',
+  regex: false,
+}
 
 // Both slots set is a tree diff; anything else is the tick mode. Rust refuses a
 // single endpoint, so the UI and the Command share this one reading.
@@ -79,6 +88,7 @@ export const DebouncedSearch = Command.define('DebouncedSearch', {
     keyword: Schema.String,
     code: Schema.Boolean,
     branch: Schema.NullOr(Schema.String),
+    filters: Filters,
   },
   messages: [Message.SearchRequested],
   execute: args => Effect.sleep(DEBOUNCE).pipe(Effect.as(Message.SearchRequested(args))),
@@ -91,18 +101,12 @@ const RunSearch = Command.define('RunSearch', {
     keyword: Schema.String,
     code: Schema.Boolean,
     branch: Schema.NullOr(Schema.String),
+    filters: Filters,
   },
   messages: [Message.SucceededSearch, Message.FailedSearch],
   execute: args =>
     Effect.tryPromise({
-      try: () =>
-        gitApi.search({
-          id: args.id,
-          repo: args.repo,
-          keyword: args.keyword,
-          code: args.code,
-          branch: args.branch,
-        }),
+      try: () => gitApi.search(args),
       catch: error => String(error),
     }).pipe(
       Effect.map(commits => Message.SucceededSearch({ id: args.id, commits: [...commits] })),
@@ -254,6 +258,33 @@ const paneSelector = (pane: Model['pane']): string =>
 
 const focusPane = (pane: Model['pane']) => FocusSelector({ selector: paneSelector(pane) })
 
+// Every change that narrows the search — the keyword, the code toggle, the
+// branch, the four `git log` filters — goes through here: bump the generation
+// and ask again after the debounce, with the whole query in the message.
+const refine = (model: Model) => {
+  const id = model.searchId + 1
+  const next = modifyFields(model, {
+    searchId: () => id,
+    searching: () => model.repo !== null,
+    error: () => null,
+  })
+  return {
+    model: next,
+    commands:
+      model.repo === null
+        ? []
+        : [
+            DebouncedSearch({
+              id,
+              keyword: next.keyword,
+              code: next.code,
+              branch: next.branch,
+              filters: next.filters,
+            }),
+          ],
+  }
+}
+
 // Shift-click and shift-arrow extend from the anchor; everything else toggles
 // one row and moves the anchor there.
 const selectRange = (model: Model, from: number, to: number) => {
@@ -346,9 +377,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         files: () => [],
         patch: () => null,
         roots: () => [],
-        // The endpoints name refs of the repository that is leaving; a load
-        // already in flight for it must not land on this one.
+        // The endpoints name refs, and the filters were typed for the history
+        // that is leaving: both belong to the repository, not the window.
         compare: () => ({ from: null, to: null }),
+        filters: () => ({ ...noFilters }),
         selectionId: id => id + 1,
       })
       return {
@@ -395,49 +427,31 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       // Opening a repository is a full search: an empty field lists everything
       // on the current ref, so the window is never a blank three-pane shell.
       if (model.repo === null || model.keyword !== '') return { model: withRefs }
-      const id = model.searchId + 1
-      return {
-        model: modifyFields(withRefs, { searchId: () => id, searching: () => true }),
-        commands: [
-          DebouncedSearch({ id, keyword: '', code: model.code, branch: model.branch }),
-        ],
-      }
+      return refine(withRefs)
     },
 
-    ChangedKeyword: ({ value }) => {
-      const id = model.searchId + 1
-      return {
-        model: modifyFields(model, {
-          keyword: () => value,
-          searchId: () => id,
-          searching: () => model.repo !== null,
-          error: () => null,
-        }),
-        commands:
-          model.repo === null
-            ? []
-            : [DebouncedSearch({ id, keyword: value, code: model.code, branch: model.branch })],
-      }
-    },
+    ChangedKeyword: ({ value }) => refine(modifyFields(model, { keyword: () => value })),
 
-    ToggledCode: () => {
-      const id = model.searchId + 1
-      const code = !model.code
+    ToggledCode: () => refine(modifyFields(model, { code: () => !model.code })),
+
+    ChangedFilters: ({ filters }) => refine(modifyFields(model, { filters: () => ({ ...filters }) })),
+
+    ToggledRegex: () =>
+      refine(modifyFields(model, { filters: () => ({ ...model.filters, regex: !model.filters.regex }) })),
+
+    ClearedFilters: () => refine(modifyFields(model, { filters: () => ({ ...noFilters }) })),
+
+    // Opening the panel puts the caret in the first field: the search box keeps
+    // focus otherwise, and every single-key shortcut would type into it.
+    ToggledFiltersPanel: () => {
+      const showFilters = !model.showFilters
       return {
-        model: modifyFields(model, {
-          code: () => code,
-          searchId: () => id,
-          searching: () => model.repo !== null,
-        }),
-        commands:
-          model.repo === null
-            ? []
-            : [DebouncedSearch({ id, keyword: model.keyword, code, branch: model.branch })],
+        model: modifyFields(model, { showFilters: () => showFilters }),
+        commands: showFilters ? [FocusSelector({ selector: '#filter-author' })] : [],
       }
     },
 
     SelectedBranch: ({ branch }) => {
-      const id = model.searchId + 1
       const branches =
         branch === null || model.repo === null
           ? model.branches.filter(entry => entry.root !== model.repo?.root)
@@ -445,25 +459,14 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
               ...model.branches.filter(entry => entry.root !== model.repo?.root),
               { root: model.repo.root, branch },
             ]
-      return {
-        model: modifyFields(model, {
-          branch: () => branch,
-          branches: () => branches,
-          searchId: () => id,
-          searching: () => model.repo !== null,
-        }),
-        commands:
-          model.repo === null
-            ? []
-            : [DebouncedSearch({ id, keyword: model.keyword, code: model.code, branch })],
-      }
+      return refine(modifyFields(model, { branch: () => branch, branches: () => branches }))
     },
 
-    SearchRequested: ({ id, keyword, code, branch }) =>
+    SearchRequested: ({ id, keyword, code, branch, filters }) =>
       id === model.searchId && model.repo !== null
         ? {
             model,
-            commands: [RunSearch({ id, repo: model.repo.root, keyword, code, branch })],
+            commands: [RunSearch({ id, repo: model.repo.root, keyword, code, branch, filters })],
           }
         : { model },
 
@@ -665,21 +668,23 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     PressedEscape: () =>
       model.showKeymap
         ? { model: modifyFields(model, { showKeymap: () => false }) }
-        : model.pane === 'search'
-          ? { model, commands: [BlurActive()] }
-          : {
-              model: modifyFields(model, {
-                pane: () =>
-                  (model.pane === 'diff'
-                    ? 'files'
-                    : model.pane === 'files'
-                      ? 'commits'
-                      : 'search') as Model['pane'],
-              }),
-              commands: [
-                focusPane(model.pane === 'diff' ? 'files' : model.pane === 'files' ? 'commits' : 'search'),
-              ],
-            },
+        : model.showFilters
+          ? { model: modifyFields(model, { showFilters: () => false }) }
+          : model.pane === 'search'
+            ? { model, commands: [BlurActive()] }
+            : {
+                model: modifyFields(model, {
+                  pane: () =>
+                    (model.pane === 'diff'
+                      ? 'files'
+                      : model.pane === 'files'
+                        ? 'commits'
+                        : 'search') as Model['pane'],
+                }),
+                commands: [
+                  focusPane(model.pane === 'diff' ? 'files' : model.pane === 'files' ? 'commits' : 'search'),
+                ],
+              },
 
     ScrolledToHunk: () => ({ model }),
     ScrolledDiff: () => ({ model }),
@@ -730,6 +735,8 @@ const emptyModel: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  filters: { ...noFilters },
+  showFilters: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 0,
@@ -755,7 +762,7 @@ export const init = (): Update.Return<Model, Message> => {
       searching: true,
       searchId: 1,
     },
-    commands: [DebouncedSearch({ id: 1, keyword: '', code: false, branch: null })],
+    commands: [DebouncedSearch({ id: 1, keyword: '', code: false, branch: null, filters: noFilters })],
   }
 }
 

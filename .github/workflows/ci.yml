@@ -46,6 +46,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - name: build installer
         run: npm run tauri build
 

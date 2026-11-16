@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
@@ -73,6 +73,71 @@ pub struct Ref {
 pub struct Repo {
     pub name: String,
     pub root: String,
+}
+
+// What `git log` already offers: author pattern, date range, pathspec, and
+// whether the keyword/author are patterns or literals. Empty means unset.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Filters {
+    pub author: String,
+    pub path: String,
+    pub since: String,
+    pub until: String,
+    pub regex: bool,
+}
+
+// git's --grep and --author are regular expressions. With the regex toggle off
+// the field is a literal, so its metacharacters are escaped — in extended
+// syntax, where `\\.` is a dot and `\\+` is a plus.
+fn literal(pattern: &str) -> String {
+    let mut escaped = String::with_capacity(pattern.len());
+    for ch in pattern.chars() {
+        if "\\.^$|?*+()[]{}".contains(ch) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
+fn filter_args(filters: &Filters) -> Vec<String> {
+    let mut args = Vec::new();
+
+    let author = filters.author.trim();
+    if !author.is_empty() {
+        let author = if filters.regex { author.to_string() } else { literal(author) };
+        args.push(format!("--author={author}"));
+    }
+
+    let since = filters.since.trim();
+    if !since.is_empty() {
+        args.push(format!("--since={since}"));
+    }
+
+    let until = filters.until.trim();
+    if !until.is_empty() {
+        // A bare date is midnight, which would silently drop that whole day:
+        // "until the 16th" has to include the 16th.
+        let until = if until.len() == 10 && until.as_bytes()[4] == b'-' {
+            format!("{until} 23:59:59")
+        } else {
+            until.to_string()
+        };
+        args.push(format!("--until={until}"));
+    }
+
+    args
+}
+
+// The pathspec goes last, after a `--`, or git reads it as a revision.
+fn path_args(filters: &Filters) -> Vec<String> {
+    let path = filters.path.trim();
+    if path.is_empty() {
+        Vec::new()
+    } else {
+        vec!["--".to_string(), path.to_string()]
+    }
 }
 
 // At most one search runs at a time; a newer id kills the older child.
@@ -263,41 +328,56 @@ pub async fn search(
     keyword: String,
     code: bool,
     branch: Option<String>,
+    filters: Filters,
 ) -> Result<Vec<Commit>, GitError> {
     crate::config::record_branch(&app, &repo, branch.as_deref());
     let needle = keyword.trim().to_string();
+    // Literal unless the regex toggle says otherwise, for the message search
+    // and the author alike.
+    let pattern = if filters.regex { needle.clone() } else { literal(&needle) };
     let mut args: Vec<String> = vec!["log".into()];
     match &branch {
         Some(branch) => args.push(branch.clone()),
         None => args.push("--all".into()),
     }
-    // An empty field is a full search: no --grep, everything on the ref.
+    // `-i` and `-E` belong to the whole grep machinery, not just --grep: the
+    // author pattern is matched with the same syntax, and an escaped `\|` is a
+    // literal pipe only in extended mode. Passing them unconditionally is what
+    // keeps `--author` and `--grep` reading the same way.
+    args.extend(["-i".into(), "-E".into()]);
+    // An empty field is a full search: no --grep, everything the filters allow.
     if !needle.is_empty() {
-        args.extend(["-i".into(), "--grep".into(), needle.clone()]);
+        args.push(format!("--grep={pattern}"));
     }
+    args.extend(filter_args(&filters));
     args.extend([
         "--date=short".into(),
         "--format=%H%x09%ad%x09%an%x09%s".into(),
         "--max-count=2000".into(),
         "--exclude=refs/stash".into(),
     ]);
+    args.extend(path_args(&filters));
 
     let mut raw = run_tracked(&state, id, &repo, &args).await?;
 
     // -a is a union, not an intersection: messages and changed lines separately.
+    // The pickaxe is a fixed string unless the regex toggle is on, where -G
+    // takes the same extended pattern as --grep.
     if code && !needle.is_empty() {
         let mut code_args: Vec<String> = vec!["log".into()];
         match &branch {
             Some(branch) => code_args.push(branch.clone()),
             None => code_args.push("--all".into()),
         }
+        code_args.extend(["-i".into(), "-E".into()]);
+        code_args.push(if filters.regex { format!("-G{pattern}") } else { format!("-S{needle}") });
+        code_args.extend(filter_args(&filters));
         code_args.extend([
-            "-i".into(),
-            format!("-S{keyword}"),
             "--date=short".into(),
             "--format=%H%x09%ad%x09%an%x09%s".into(),
             "--max-count=2000".into(),
         ]);
+        code_args.extend(path_args(&filters));
         raw.push('\n');
         raw.push_str(&run_tracked(&state, id, &repo, &code_args).await?);
     }
@@ -466,4 +546,50 @@ pub async fn roots(
         }
     }
     Ok(roots)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The bug this guards: with an empty keyword the search passed no -E, so git
+    // read the author pattern as a *basic* regex, where `\|` is alternation and
+    // a literal filter matched everything instead of nothing.
+    #[test]
+    fn literals_escape_extended_regex_metacharacters() {
+        assert_eq!(literal("anton|dependabot"), "anton\\|dependabot");
+        assert_eq!(literal("src/app.ts"), "src/app\\.ts");
+        assert_eq!(literal("(v1)+ [x]"), "\\(v1\\)\\+ \\[x\\]");
+        assert_eq!(literal("plain-name"), "plain-name");
+    }
+
+    #[test]
+    fn the_author_is_a_literal_unless_regex_is_on() {
+        let literal_author = Filters { author: " a|b ".into(), ..Default::default() };
+        assert_eq!(filter_args(&literal_author), vec!["--author=a\\|b".to_string()]);
+
+        let pattern = Filters { author: "a|b".into(), regex: true, ..Default::default() };
+        assert_eq!(filter_args(&pattern), vec!["--author=a|b".to_string()]);
+    }
+
+    // "until the 16th" has to include the 16th: a bare date is midnight.
+    #[test]
+    fn an_until_date_covers_its_whole_day() {
+        let filters = Filters {
+            since: "2026-11-01".into(),
+            until: "2026-11-16".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            filter_args(&filters),
+            vec!["--since=2026-11-01".to_string(), "--until=2026-11-16 23:59:59".to_string()],
+        );
+    }
+
+    #[test]
+    fn a_pathspec_goes_after_a_double_dash() {
+        let filters = Filters { path: " src/http ".into(), ..Default::default() };
+        assert_eq!(path_args(&filters), vec!["--".to_string(), "src/http".to_string()]);
+        assert!(path_args(&Filters::default()).is_empty());
+    }
 }

@@ -18,8 +18,9 @@ patches together, because a patch is computed against a commit's own parent.
 
 **In v1** — open repository (any subfolder, resolved to the root), recents,
 keyword search over messages, `-a` code search checkbox, branch filter, commit
-checklist, file list, per-file patch pane, **two-endpoint compare**, six
-non-content states, keyboard accelerators.
+checklist, file list, per-file patch pane, **two-endpoint compare**,
+**filters (author, path, dates, regex)**, six non-content states, keyboard
+accelerators.
 
 **Out of v1** — export or copy of any patch; review notes (map #2); staging,
 committing, merging, rebasing; commit graph, blame; plugins; i18n; telemetry;
@@ -31,7 +32,9 @@ tabs or multiple repositories; macOS/Linux; code signing; auto-update.
    repository…*.
 2. Type a keyword: search after a 250 ms debounce, cancelled on the next
    keystroke; `Enter` runs immediately. The branch filter (default *All refs*)
-   narrows the search without clearing ticks.
+   narrows the search without clearing ticks. *filters* opens a row of `git log`
+   limits — author, path, since, until, and a regex toggle — that narrow the
+   same search, also after the debounce.
 3. Tick commits: the file pane lists the union of their files with added and
    removed counts; the diff pane shows the selected file's patch. A divider
    appears when the selection's commits share no ancestor.
@@ -70,8 +73,8 @@ Tauri 2 (Windows x64, WebView2)
 ```rust
 #[tauri::command] async fn open_repo(path: String) -> Result<Repo, GitError>;
 #[tauri::command] async fn search(state: State<'_, GitState>, id: u64,
-    repo: String, keyword: String, code: bool, branch: Option<String>)
-    -> Result<Vec<Commit>, GitError>;
+    repo: String, keyword: String, code: bool, branch: Option<String>,
+    filters: Filters) -> Result<Vec<Commit>, GitError>;
 #[tauri::command] async fn cancel_search(state: State<'_, GitState>, id: u64)
     -> Result<(), GitError>;
 #[tauri::command] async fn files(state: State<'_, GitState>, shas: Vec<String>,
@@ -110,10 +113,29 @@ type Ref = { name: string; kind: 'local' | 'remote' | 'tag' }
 
 ## Search semantics
 
-`git log --all -i --grep=<kw> --format=…` (plus `-S<kw>` when `-a` is ticked,
-unioned not intersected), newest first by commit date, capped at **2 000**
-commits with a "narrow the keyword" hint, excluding `refs/stash`. With a branch
-filter, the ref replaces `--all`. Matching is case-insensitive over the message.
+`git log --all -i -E --grep=<pattern> --format=…` (plus `-S<pattern>` when `-a`
+is ticked, unioned not intersected), newest first by commit date, capped at
+**2 000** commits with a "narrow the keyword" hint, excluding `refs/stash`.
+With a branch filter, the ref replaces `--all`. Matching is case-insensitive.
+
+### Filters
+
+One row under the top bar, each field passed straight to `git log`:
+
+| Field | Argument | Notes |
+| --- | --- | --- |
+| author | `--author=<pattern>` | matched against the author name and email |
+| path | `-- <pathspec>` | last, after `--`, or git reads it as a revision |
+| since / until | `--since=`, `--until=` | a bare `until` date gets ` 23:59:59`, because midnight would drop that whole day |
+| regex | `-E` | see below |
+
+`-i -E` are always passed: `--author` is matched by the same grep machinery as
+`--grep`, and `-E` decides what an escaped `\|` means. With the **regex** toggle
+off (the default) the keyword and the author are literals — their ERE
+metacharacters are escaped in Rust, so `a.b` finds `a.b` and not `axb`; with it
+on they are extended regular expressions, and the `-a` pickaxe becomes `-G`
+(regex) instead of `-S` (fixed string). Filters are not persisted and are
+cleared when another repository opens.
 
 ## Roots and the divider
 
@@ -134,7 +156,7 @@ comparison itself never fails on unrelated roots.
 | Nothing open | overlay, panes dimmed | *Open repository…*, recents |
 | No repository here or above | overlay | *Choose another folder…* |
 | git not on PATH | overlay, needs 2.28+ | *How to install git*, *Re-check* |
-| No matches | commits pane | echoes keyword and the rule |
+| No matches | commits pane | echoes keyword and the rule, or the filters with a *Clear filters* action |
 | Filtered away | commits pane | *Search all refs* |
 | Running / cancelled | commits pane | results kept |
 
@@ -143,16 +165,18 @@ Artifact: `docs/wayfinder/prototypes/non-content-states.html`.
 ## Keyboard
 
 `/` focus search · `j`/`k` next/previous commit · `space` toggle ·
-`enter` focus the diff · `esc` leave the field · `f`/`t` use the commit under
-the cursor as the compare from/to endpoint · `x` swap the endpoints. Never bind
-`Mod+F`, `Mod+P`, `Mod+R`, `F5` (WebView2 accelerators cannot be disabled).
+`enter` focus the diff · `esc` leave the field, close the keymap or the filters
+row · `f`/`t` use the commit under the cursor as the compare from/to endpoint ·
+`x` swap the endpoints. Never bind `Mod+F`, `Mod+P`, `Mod+R`, `F5` (WebView2
+accelerators cannot be disabled).
 
 ## Config
 
 One JSON file in the app data dir: `recents` (up to 10 repository roots),
 `lastRepo`, per-repository `branch`. A deleted or unfetched ref falls back to
-*All refs*. The compare endpoints are **not** persisted: they name refs of the
-repository that is open, and a fresh window starts on the ticks.
+*All refs*. Neither the compare endpoints nor the filters are persisted: they
+name refs and history of the repository that is open, and both are cleared when
+another one opens.
 
 ## Performance
 
@@ -166,9 +190,12 @@ virtualisation in v1; the cap is the strategy.
   branch filter keeping ticks, roots split, states, cancelled search,
   two-endpoint compare (one slot is inert, two replace the ticks, clearing
   returns to them, ticking while comparing does not reload, a stale selection
-  answer never lands).
-- Rust tests against a fixture repository built in the test: two orphan roots, a
-  merge, a file on both, a keyword hit on each root.
+  answer never lands), filters (each change reaches the search Command's args,
+  regex counts, clear resets, whitespace does not count, escape closes the row).
+- Rust unit tests (`cargo test --lib`) over the arguments git receives: the ERE
+  escaping for literals, an author pattern only when regex is on, the
+  `until`-covers-its-day rule, and the pathspec after `--`. A fixture-repository
+  suite is still missing (the spec claimed one before it existed).
 - CI on Windows: both suites, `npm run build`, `tauri build`, and a check that
   `__setDevToolsOverlay` is absent from `dist` (the runtime's own
   `foldkit-devtools` element id is not the overlay).

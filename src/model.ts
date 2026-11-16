@@ -29,6 +29,16 @@ export const Endpoints = Schema.Struct({
   to: Schema.NullOr(Schema.String),
 })
 
+// What `git log` already offers, as one input to the search. An empty string is
+// "not set"; the fields are the raw input values so the panel can keep them.
+export const Filters = Schema.Struct({
+  author: Schema.String,
+  path: Schema.String,
+  since: Schema.String,
+  until: Schema.String,
+  regex: Schema.Boolean,
+})
+
 export const Model = Schema.Struct({
   repo: Schema.NullOr(Repo),
   recents: Schema.Array(Repo),
@@ -50,6 +60,8 @@ export const Model = Schema.Struct({
   pane: Schema.Literals(['search', 'commits', 'files', 'diff']),
   hunkIndex: Schema.Number,
   branches: Schema.Array(Schema.Struct({ root: Schema.String, branch: Schema.String })),
+  filters: Filters,
+  showFilters: Schema.Boolean,
   compare: Endpoints,
   searching: Schema.Boolean,
   searchId: Schema.Number,
@@ -58,3 +70,12 @@ export const Model = Schema.Struct({
   error: Schema.NullOr(GitError),
 })
 export type Model = typeof Model.Type
+
+// What the filter button counts: the four log limits, and the regex toggle
+// because it changes how the keyword is read.
+export const activeFilterCount = (filters: typeof Filters.Type): number =>
+  [filters.author, filters.path, filters.since, filters.until].filter(
+    value => value.trim() !== '',
+  ).length + (filters.regex ? 1 : 0)
+
+export const hasFilters = (filters: typeof Filters.Type): boolean => activeFilterCount(filters) > 0

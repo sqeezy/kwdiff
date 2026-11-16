@@ -1,6 +1,6 @@
 // Fixture repository for the browser dev server and the tests. Same shapes the
 // Rust side returns: two unrelated roots, one keyword on each, one file on both.
-import type { Commit, Config, Endpoints, FilePatch, Ref, Repo, RootOf, SearchArgs } from './types'
+import type { Commit, Config, Endpoints, FilePatch, Filters, Ref, Repo, RootOf, SearchArgs } from './types'
 import type { GitApi } from './git'
 
 type Fixture = Readonly<{
@@ -330,6 +330,44 @@ const treeAt = (endpoint: string): ReadonlyMap<string, FilePatch & { patch: stri
   return tree
 }
 
+// `--grep` and `--author` are regular expressions unless the regex toggle is
+// off, where both are literals.
+const regex = (value: string): RegExp | null => {
+  try {
+    return new RegExp(value, 'i')
+  } catch {
+    return null
+  }
+}
+
+const matchesFilters = (f: Fixture, filters: Filters): boolean => {
+  const author = filters.author.trim().toLowerCase()
+  if (author !== '' && !f.author.toLowerCase().includes(author)) return false
+  const since = filters.since.trim()
+  if (since !== '' && f.date < since) return false
+  const until = filters.until.trim()
+  if (until !== '' && f.date > until) return false
+  // A pathspec, approximated: the fixture has no tree, only a file list.
+  const path = filters.path.trim()
+  if (path !== '' && !f.files.some(file => file.path.includes(path))) return false
+  return true
+}
+
+const matchesKeyword = (f: Fixture, needle: string, code: boolean, filters: Filters): boolean => {
+  if (needle === '') return true
+  const pattern = filters.regex ? regex(needle) : null
+  if (filters.regex && pattern === null) return false
+  const inMessage = pattern === null
+    ? f.subject.toLowerCase().includes(needle.toLowerCase())
+    : pattern.test(f.subject)
+  const inCode = code && f.files.some(file =>
+    pattern === null
+      ? file.patch.toLowerCase().includes(needle.toLowerCase())
+      : pattern.test(file.patch),
+  )
+  return inMessage || inCode
+}
+
 export const mockGit: GitApi = {
   openRepo: async (path: string): Promise<Repo> => {
     await delay(40)
@@ -342,19 +380,15 @@ export const mockGit: GitApi = {
     return refs
   },
 
-  search: async ({ keyword, code, branch }: SearchArgs) => {
+  search: async ({ keyword, code, branch, filters }: SearchArgs) => {
     await delay(220)
-    const needle = keyword.trim().toLowerCase()
+    const needle = keyword.trim()
     // An empty field is a full search, the way every git client behaves:
-    // everything on the ref, newest first.
-    if (needle === '') {
-      const all = fixtures.filter(f => branch === null || f.branches.includes(branch))
-      return [...all].sort(newestFirst).map(toCommit)
-    }
+    // everything the filters allow, newest first.
     const hits = fixtures.filter(f => {
-      const inMessage = f.subject.toLowerCase().includes(needle)
-      const inCode = code && f.files.some(file => file.patch.toLowerCase().includes(needle))
-      return (inMessage || inCode) && (branch === null || f.branches.includes(branch))
+      if (branch !== null && !f.branches.includes(branch)) return false
+      if (!matchesFilters(f, filters)) return false
+      return matchesKeyword(f, needle, code, filters)
     })
     return hits.sort(newestFirst).map(toCommit)
   },

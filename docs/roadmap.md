@@ -14,7 +14,8 @@ believe it works:
 - **two-endpoint compare** (done 0.3.0, ANT-66): "what changed between these
   two tips" is the most asked review question and the one every competitor
   answers;
-- **filters** (ANT-64): author, date, path, regex — `git log` already does it;
+- **filters** (done 0.4.0, ANT-64): author, date, path, regex — `git log`
+  already does it;
 - **search-to-hunk** (ANT-60): `-a` matches should open where they matched;
 - **diff pane line keys** (ANT-73): arrows scroll lines, `n`/`p` keep hunks;
 - **the e2e gate is blocking** (ANT-74), with hunk-navigation assertions;

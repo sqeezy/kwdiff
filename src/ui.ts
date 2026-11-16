@@ -1,6 +1,7 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { Message } from './message'
+import { activeFilterCount } from './model'
 import type { Model } from './model'
 import type { Endpoints } from './types'
 
@@ -50,6 +51,32 @@ const primary = (label: string, message: Message, h: HtmlBuilder<Message>) =>
     ],
     [label],
   )
+
+// One `git log` limit: a label and its field, so the row reads as the command.
+const filterField = (
+  id: string,
+  label: string,
+  value: string,
+  type: 'text' | 'date',
+  onInput: (value: string) => Message,
+  h: HtmlBuilder<Message>,
+) =>
+  h.label([h.Class('flex items-center gap-1')], [
+    h.span([h.Class(`font-mono text-[10px] ${dim}`)], [label]),
+    h.input([
+      h.Attribute('id', id),
+      h.Attribute('type', type),
+      h.Attribute('spellcheck', 'false'),
+      h.Attribute('aria-label', label),
+      h.Value(value),
+      h.OnInput(onInput),
+      h.Class(
+        `rounded border border-[#2b3543] bg-[#0b0e14] px-1.5 py-1 font-mono text-[11px] text-[#e6edf3] outline-none focus:border-[#3fb950] ${
+          type === 'date' ? 'w-[128px]' : 'w-[136px]'
+        }`,
+      ),
+    ]),
+  ])
 
 // Two endpoints make a tree diff; one or none is the tick mode.
 const endpointsOf = (model: Model): Endpoints | null =>
@@ -102,6 +129,12 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
   const removed = model.files.reduce((sum, file) => sum + file.removed, 0)
   const allTicked = model.commits.length > 0 && selected.length === model.commits.length
   const compare = endpointsOf(model)
+  const filterCount = activeFilterCount(model.filters)
+  const noMatch =
+    model.commits.length === 0 &&
+    !model.searching &&
+    model.error === null &&
+    (model.keyword !== '' || filterCount > 0)
 
   return h.div([h.Class(`${bg} flex h-screen flex-col font-sans antialiased`)], [
     // ---- top bar ---------------------------------------------------------
@@ -154,6 +187,22 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
           ],
           ['-a code'],
         ),
+        h.button(
+          [
+            h.OnClick(Message.ToggledFiltersPanel()),
+            h.Attribute('id', 'filters-toggle'),
+            h.Attribute('aria-expanded', model.showFilters ? 'true' : 'false'),
+            h.Attribute('title', 'Author, path, dates, regex — git log filters'),
+            h.Class(
+              `rounded border px-1.5 py-1 font-mono text-[11px] ${
+                filterCount > 0 || model.showFilters
+                  ? 'border-[#3fb950] text-[#3fb950]'
+                  : 'border-[#2b3543] text-[#7d8b9e] hover:text-[#c9d1d9]'
+              }`,
+            ),
+          ],
+          [filterCount > 0 ? `filters · ${filterCount}` : 'filters'],
+        ),
         h.div([h.Class('flex items-center gap-1')], [
           endpointSelect('from', model, h),
           h.span([h.Class('font-mono text-[11px] text-[#556176]')], ['→']),
@@ -192,6 +241,78 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         ]),
       ],
     ),
+
+    // ---- filter row ------------------------------------------------------
+    model.showFilters
+      ? h.div(
+          [
+            h.Attribute('id', 'filter-row'),
+            h.Class(`flex flex-wrap items-center gap-2 border-b ${border} ${panel} px-3 py-1.5`),
+          ],
+          [
+            filterField(
+              'filter-author',
+              'author',
+              model.filters.author,
+              'text',
+              value => Message.ChangedFilters({ filters: { ...model.filters, author: value } }),
+              h,
+            ),
+            filterField(
+              'filter-path',
+              'path',
+              model.filters.path,
+              'text',
+              value => Message.ChangedFilters({ filters: { ...model.filters, path: value } }),
+              h,
+            ),
+            filterField(
+              'filter-since',
+              'since',
+              model.filters.since,
+              'date',
+              value => Message.ChangedFilters({ filters: { ...model.filters, since: value } }),
+              h,
+            ),
+            filterField(
+              'filter-until',
+              'until',
+              model.filters.until,
+              'date',
+              value => Message.ChangedFilters({ filters: { ...model.filters, until: value } }),
+              h,
+            ),
+            h.button(
+              [
+                h.OnClick(Message.ToggledRegex()),
+                h.Attribute('id', 'filter-regex'),
+                h.Attribute('aria-pressed', model.filters.regex ? 'true' : 'false'),
+                h.Attribute('title', 'Treat the keyword and the author as regular expressions'),
+                h.Class(
+                  `rounded border px-1.5 py-1 font-mono text-[11px] ${
+                    model.filters.regex
+                      ? 'border-[#3fb950] text-[#3fb950]'
+                      : 'border-[#2b3543] text-[#7d8b9e] hover:text-[#c9d1d9]'
+                  }`,
+                ),
+              ],
+              ['regex'],
+            ),
+            h.button(
+              [
+                h.OnClick(Message.ClearedFilters()),
+                h.Attribute('id', 'filter-clear'),
+                h.Attribute('title', 'Clear every filter'),
+                h.Class(
+                  'rounded border border-[#2b3543] px-1.5 py-1 font-mono text-[11px] text-[#9aa7b8] hover:border-[#3fb950] hover:text-[#3fb950]',
+                ),
+              ],
+              ['clear'],
+            ),
+            h.span([h.Class(`font-mono text-[10px] ${quiet}`)], ['git log · applies after 250 ms']),
+          ],
+        )
+      : h.span([]),
 
     // ---- three panes -----------------------------------------------------
     h.div(
@@ -262,23 +383,38 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                   ),
                 ])
               }),
-              ...(model.commits.length === 0 && model.keyword !== '' && !model.searching && model.error === null
+              ...(noMatch
                 ? [
                     h.li([h.Class('px-3 py-4 text-[11.5px] leading-5 text-[#7d8b9e]')], [
-                      model.branch === null
-                        ? `No commit message contains “${model.keyword}”. Case-insensitive; every ref is searched.`
-                        : `No match on ${model.branch}.`,
+                      filterCount > 0
+                        ? `No match with these ${filterCount} filter${filterCount === 1 ? '' : 's'}${
+                            model.branch === null ? '' : ` on ${model.branch}`
+                          }.`
+                        : model.branch === null
+                          ? `No commit message contains “${model.keyword}”. Case-insensitive; every ref is searched.`
+                          : `No match on ${model.branch}.`,
                       ...(model.branch === null
                         ? []
                         : [
                             h.button(
                               [
                                 h.OnClick(Message.SelectedBranch({ branch: null })),
-                                h.Class('mt-2 rounded border border-[#2b3543] px-2 py-1 font-mono text-[10.5px] text-[#9aa7b8]'),
+                                h.Class('mt-2 mr-2 rounded border border-[#2b3543] px-2 py-1 font-mono text-[10.5px] text-[#9aa7b8]'),
                               ],
                               ['Search all refs'],
                             ),
                           ]),
+                      ...(filterCount > 0
+                        ? [
+                            h.button(
+                              [
+                                h.OnClick(Message.ClearedFilters()),
+                                h.Class('mt-2 rounded border border-[#2b3543] px-2 py-1 font-mono text-[10.5px] text-[#9aa7b8]'),
+                              ],
+                              ['Clear filters'],
+                            ),
+                          ]
+                        : []),
                     ]),
                   ]
                 : []),
@@ -515,7 +651,7 @@ const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['j / k  ·  ↓ / ↑', 'move inside the focused pane'],
   ['space', 'tick or untick the commit under the cursor'],
   ['enter', 'one pane deeper'],
-  ['esc', 'one pane back, close this list'],
+  ['esc', 'one pane back, close the keymap or the filters'],
   ['n / p', 'next / previous hunk in the diff'],
   ['g / shift+g', 'first / last hunk'],
   ['f / t', 'compare from / to the commit under the cursor'],
