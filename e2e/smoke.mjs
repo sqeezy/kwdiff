@@ -354,6 +354,27 @@ async function main() {
     )
     check('the file has more than one hunk', hunks >= 2, `hunks=${hunks}`)
 
+    // The gutter numbers come from the hunk header, so they must start where it
+    // says: `@@ -a,b +N,c @@` means the first added line is N.
+    const gutter = await exec(`
+      const pane = document.getElementById("diff-pane");
+      if (!pane) return null;
+      const header = (pane.textContent || "").match(/@@ -\\d+(?:,\\d+)? \\+(\\d+)/);
+      const numbered = [...pane.querySelectorAll("[data-new]")]
+        .map(el => el.getAttribute("data-new"))
+        .filter(value => value !== null)
+        .map(value => Number(value));
+      return {
+        header: header ? Number(header[1]) : null,
+        first: numbered.length ? Number(numbered[0]) : null,
+      };
+    `)
+    check(
+      'the gutter starts at the hunk header',
+      gutter !== null && gutter.header !== null && gutter.header === gutter.first,
+      `header=${gutter?.header} gutter=${gutter?.first}`,
+    )
+
     // A click moved focus onto the file row; Tab from the diff focuses the pane.
     await press('Tab')
     const paneFocus = await waitFor(activeIdScript, value => value === 'diff-pane', 5000)
