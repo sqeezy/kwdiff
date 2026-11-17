@@ -123,6 +123,18 @@ const endpointSelect = (slot: 'from' | 'to', model: Model, h: HtmlBuilder<Messag
   )
 }
 
+// A file row shows every segment of its path: the directory dim and allowed to
+// truncate, the file name bright and whole. Neither ever drops a segment.
+const directoryOf = (path: string): string => {
+  const slash = path.lastIndexOf('/')
+  return slash < 0 ? '' : path.slice(0, slash + 1)
+}
+
+const fileNameOf = (path: string): string => {
+  const slash = path.lastIndexOf('/')
+  return slash < 0 ? path : path.slice(slash + 1)
+}
+
 export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
   const selected = model.commits.filter(commit => model.selectedShas.includes(commit.sha))
   const added = model.files.reduce((sum, file) => sum + file.added, 0)
@@ -473,7 +485,17 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                           ['•'],
                         )
                       : h.span([]),
-                    h.span([h.Class('truncate')], [file.path.replace(/^src\//, '')]),
+                    // The real path, never a shortened one: the directory is dim
+                    // and truncates from the right while the file name stays whole.
+                    h.span(
+                      [h.Class('flex min-w-0 items-baseline'), h.Attribute('title', file.path)],
+                      [
+                        directoryOf(file.path) === ''
+                          ? h.span([])
+                          : h.span([h.Class(`min-w-0 truncate ${dim}`)], [directoryOf(file.path)]),
+                        h.span([h.Class('shrink-0 text-[#e6edf3]')], [fileNameOf(file.path)]),
+                      ],
+                    ),
                     h.span([h.Class('ml-auto shrink-0 text-[10.5px] text-[#3fb950]')], [`+${file.added}`]),
                     h.span([h.Class('shrink-0 text-[10.5px] text-[#f85149]')], [`−${file.removed}`]),
                   ],
