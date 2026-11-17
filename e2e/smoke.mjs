@@ -637,7 +637,15 @@ async function main() {
     await http(`/session/${sid}`, 'DELETE')
   } finally {
     driver.kill()
-    if (failures === 0) rmSync(repo, { recursive: true, force: true })
+    if (failures === 0) {
+      // Best effort: the app may still be shutting down and holding the folder
+      // (Windows then answers EBUSY). A leftover temp dir is not a test failure.
+      try {
+        rmSync(repo, { recursive: true, force: true })
+      } catch {
+        console.log(`     left the fixture behind: ${repo}`)
+      }
+    }
   }
 
   console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`)
