@@ -27,7 +27,9 @@ believe it works:
 
 Release criterion: `npm run e2e` green on the bench VM **and** in CI, the
 installer from CI runs on the colleague's machine, and the issues above are
-closed. Anything else is post-v1.
+closed. Anything else is post-v1. Every release also names itself in
+`docs/guide.md` and `docs/features.md` and regenerates `docs/guide.html`
+(`npm run docs:check` is in CI).
 
 Versions stay **0.x** for now (owner's call, 2026-11-16): the milestone is called
 *v1.0 — releasable*, but the app ships 0.5.x / 0.6.x until the owner says

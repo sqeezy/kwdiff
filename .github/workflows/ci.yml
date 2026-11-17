@@ -22,6 +22,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: docs are current
+        run: npm run docs:check
       - name: no devtools overlay in the bundle
         run: |
           # The runtime mentions `foldkit-devtools` as an element id; the overlay
