@@ -477,9 +477,11 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     SucceededRefs: ({ refs }) => {
       const withRefs = modifyFields(model, { refs: () => [...refs] })
-      // Opening a repository is a full search: an empty field lists everything
-      // on the current ref, so the window is never a blank three-pane shell.
-      if (model.repo === null || model.keyword !== '') return { model: withRefs }
+      // Opening a repository searches straight away — with the field as it is,
+      // so an empty field lists everything on the current ref (the window is
+      // never a blank shell) and switching repositories with a keyword typed
+      // runs that query again instead of showing nothing.
+      if (model.repo === null) return { model: withRefs }
       return refine(withRefs)
     },
 
