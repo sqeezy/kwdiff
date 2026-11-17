@@ -27,6 +27,7 @@ export const Message = defineMessageUnion({
   ToggledRegex: {},
   ClearedFilters: {},
   ToggledFiltersPanel: {},
+  ToggledRepos: {},
   SucceededSearch: { id: Schema.Number, commits: Schema.Array(Commit) },
   FailedSearch: { id: Schema.Number, message: Schema.String },
 

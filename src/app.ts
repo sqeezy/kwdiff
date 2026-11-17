@@ -433,6 +433,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         // that is leaving: both belong to the repository, not the window.
         compare: () => ({ from: null, to: null }),
         filters: () => ({ ...noFilters }),
+        showRepos: () => false,
         selectionId: id => id + 1,
       })
       return {
@@ -476,9 +477,11 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     SucceededRefs: ({ refs }) => {
       const withRefs = modifyFields(model, { refs: () => [...refs] })
-      // Opening a repository is a full search: an empty field lists everything
-      // on the current ref, so the window is never a blank three-pane shell.
-      if (model.repo === null || model.keyword !== '') return { model: withRefs }
+      // Opening a repository searches straight away — with the field as it is,
+      // so an empty field lists everything on the current ref (the window is
+      // never a blank shell) and switching repositories with a keyword typed
+      // runs that query again instead of showing nothing.
+      if (model.repo === null) return { model: withRefs }
       return refine(withRefs)
     },
 
@@ -495,6 +498,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     // Opening the panel puts the caret in the first field: the search box keeps
     // focus otherwise, and every single-key shortcut would type into it.
+    // The recents live under the top bar, like the filters: one row, no overlay
+    // to click away.
+    ToggledRepos: () => ({ model: modifyFields(model, { showRepos: () => !model.showRepos }) }),
+
     ToggledFiltersPanel: () => {
       const showFilters = !model.showFilters
       return {
@@ -736,7 +743,9 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     PressedEscape: () =>
       model.showKeymap
         ? { model: modifyFields(model, { showKeymap: () => false }) }
-        : model.showFilters
+        : model.showRepos
+          ? { model: modifyFields(model, { showRepos: () => false }) }
+          : model.showFilters
           ? { model: modifyFields(model, { showFilters: () => false }) }
           : model.pane === 'search'
             ? { model, commands: [BlurActive()] }
@@ -805,6 +814,7 @@ const emptyModel: Model = {
   branches: [],
   filters: { ...noFilters },
   showFilters: false,
+  showRepos: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 0,

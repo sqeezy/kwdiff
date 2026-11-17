@@ -155,9 +155,29 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       [
         h.span([h.Class('font-mono text-[12px] font-bold text-[#e6edf3]')], ['kwdiff']),
         h.span([h.Class('font-mono text-[12px] text-[#556176]')], ['/']),
-        h.span([h.Class('truncate font-mono text-[12px] text-[#e6edf3]')], [
-          model.repo?.name ?? 'no repository',
-        ]),
+        h.button(
+          [
+            h.Attribute('id', 'repos-toggle'),
+            h.OnClick(Message.ToggledRepos()),
+            h.Attribute('aria-expanded', model.showRepos ? 'true' : 'false'),
+            h.Attribute('title', 'Open another repository'),
+            h.Class(
+              'flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 font-mono text-[12px] text-[#e6edf3] hover:bg-[#161b22]',
+            ),
+          ],
+          [
+            h.span([h.Class('max-w-[160px] truncate')], [model.repo?.name ?? 'no repository']),
+            // A CSS triangle: no font gets to decide whether the caret shows.
+            h.span(
+              [
+                h.Class(
+                  'inline-block size-0 border-x-4 border-t-[5px] border-x-transparent border-t-[#7d8b9e]',
+                ),
+              ],
+              [],
+            ),
+          ],
+        ),
         h.select(
           [
             h.Attribute('aria-label', 'Branch filter'),
@@ -254,6 +274,51 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         ]),
       ],
     ),
+
+    // ---- repository row --------------------------------------------------
+    model.showRepos
+      ? h.div(
+          [
+            h.Attribute('id', 'repos-row'),
+            h.Class(`flex flex-wrap items-center gap-2 border-b ${border} ${panel} px-3 py-1.5`),
+          ],
+          [
+            h.button(
+              [
+                h.Attribute('id', 'repos-open'),
+                h.OnClick(Message.ClickedOpen()),
+                h.Class(
+                  'rounded border border-[#2b3543] px-2 py-1 font-mono text-[11px] text-[#c9d1d9] hover:border-[#3fb950] hover:text-[#3fb950]',
+                ),
+              ],
+              ['Open repository…'],
+            ),
+            ...(model.recents.length === 0
+              ? [h.span([h.Class(`font-mono text-[10px] ${quiet}`)], ['no recent repositories yet'])]
+              : model.recents.map((entry, index) =>
+                  h.button(
+                    [
+                      h.Attribute('id', `recent-${index}`),
+                      h.OnClick(Message.PickedRepo({ path: entry.root })),
+                      h.Attribute('title', entry.root),
+                      h.Class(
+                        `flex min-w-0 max-w-[280px] items-baseline gap-2 rounded px-2 py-1 font-mono text-[11px] ${
+                          entry.root === model.repo?.root
+                            ? 'text-[#3fb950]'
+                            : 'text-[#c9d1d9] hover:bg-[#161b22]'
+                        }`,
+                      ),
+                    ],
+                    [
+                      h.span([h.Class('shrink-0')], [entry.name]),
+                      h.span([h.Class(`min-w-0 truncate ${dim}`)], [entry.root]),
+                    ],
+                  ),
+                )),
+            h.span([h.Class(`font-mono text-[10px] ${quiet}`)], ['esc closes']),
+          ],
+        )
+      : h.span([]),
 
     // ---- filter row ------------------------------------------------------
     model.showFilters

@@ -52,6 +52,7 @@ const base: Model = {
   branches: [],
   filters: { ...noFilters },
   showFilters: false,
+  showRepos: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 1,
@@ -269,6 +270,7 @@ describe('recents', () => {
       given({ ...base, repo: null, recents: [] }),
       message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
       refs,
+      debounceStale,
       model(m => {
         expect(m.recents[0]?.root).toBe('C:\\work\\other')
       }),
@@ -281,6 +283,7 @@ describe('recents', () => {
       given({ ...base, recents: [repo, { name: 'other', root: 'C:\\work\\other' }] }),
       message(Message.OpenedRepo({ name: repo.name, root: repo.root })),
       refs,
+      debounceStale,
       model(m => {
         expect(m.recents.map(entry => entry.root)).toEqual(['C:\\work\\acme-api', 'C:\\work\\other'])
       }),
@@ -297,6 +300,7 @@ describe('recents', () => {
       given({ ...base, recents: many }),
       message(Message.OpenedRepo({ name: 'new', root: 'C:\\work\\new' })),
       refs,
+      debounceStale,
       model(m => {
         expect(m.recents.length).toBe(10)
         expect(m.recents[0]?.root).toBe('C:\\work\\new')
@@ -695,6 +699,7 @@ describe('filters', () => {
       given({ ...base, filters: filtersOf({ author: 'Petra' }) }),
       message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
       Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      debounceStale,
       model(m => {
         expect(m.filters).toEqual(noFilters)
       }),
@@ -854,6 +859,7 @@ describe('startup', () => {
       ),
       Command.resolve(OpenRepo, Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
       Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      debounceStale,
       model(m => {
         expect(m.repo?.root).toBe('C:\\work\\other')
         expect(m.branch).toBe('release/4.2')
@@ -1015,5 +1021,54 @@ describe('focus messages', () => {
       Command.resolve(BlurActive, Message.Blurred()),
       model(m => expect(m.pane).toBe('search')),
     )
+  })
+})
+
+// Switching repositories without restarting: the row under the top bar carries
+// the picker and the recents, and closes itself once one is open.
+describe('the repository row', () => {
+  test('the top bar opens the row, and escape closes it first', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledRepos()),
+      model(m => expect(m.showRepos).toBe(true)),
+      message(Message.PressedEscape()),
+      model(m => {
+        expect(m.showRepos).toBe(false)
+        expect(m.pane).toBe('search')
+      }),
+    )
+  })
+
+  test('opening a repository closes the row', () => {
+    story(
+      update,
+      given({ ...base, showRepos: true }),
+      message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      debounceStale,
+      model(m => expect(m.showRepos).toBe(false)),
+    )
+  })
+})
+
+// A repository switch keeps the query: refs arriving is what re-runs it, so a
+// keyword typed in the old repository searches the new one instead of showing
+// an empty list.
+describe('refs arriving', () => {
+  test('a reopen with a keyword re-runs that query', () => {
+    const out = update({ ...base, keyword: 'retry' }, Message.SucceededRefs({ refs: [] }))
+    const command = out.commands?.[0] as { name: string; args?: Record<string, unknown> } | undefined
+    expect(command?.name).toBe('DebouncedSearch')
+    expect(command?.args).toMatchObject({ keyword: 'retry', branch: null })
+    expect(out.model.searching).toBe(true)
+  })
+
+  test('with no repository there is nothing to search', () => {
+    const out = update({ ...base, repo: null }, Message.SucceededRefs({ refs: [] }))
+    expect(out.model.refs).toEqual([])
+    // No repository: the handler returns a model and no Commands at all.
+    expect(out.commands).toBeUndefined()
   })
 })
