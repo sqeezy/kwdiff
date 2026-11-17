@@ -52,6 +52,7 @@ const base: Model = {
   branches: [],
   filters: { ...noFilters },
   showFilters: false,
+  showRepos: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 1,
@@ -1014,6 +1015,34 @@ describe('focus messages', () => {
       message(Message.BlurRequested()),
       Command.resolve(BlurActive, Message.Blurred()),
       model(m => expect(m.pane).toBe('search')),
+    )
+  })
+})
+
+// Switching repositories without restarting: the row under the top bar carries
+// the picker and the recents, and closes itself once one is open.
+describe('the repository row', () => {
+  test('the top bar opens the row, and escape closes it first', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledRepos()),
+      model(m => expect(m.showRepos).toBe(true)),
+      message(Message.PressedEscape()),
+      model(m => {
+        expect(m.showRepos).toBe(false)
+        expect(m.pane).toBe('search')
+      }),
+    )
+  })
+
+  test('opening a repository closes the row', () => {
+    story(
+      update,
+      given({ ...base, showRepos: true }),
+      message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      model(m => expect(m.showRepos).toBe(false)),
     )
   })
 })

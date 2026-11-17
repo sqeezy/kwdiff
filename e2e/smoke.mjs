@@ -604,7 +604,36 @@ async function main() {
     )
     check('the patch opens at the hunk that matched', jumped === 2, `active=${jumped}`)
 
-    // 8. The two keys a reviewer presses first: `/` to the search field, and
+    // 8. Switching repositories from the top bar.
+    await clickOn('#repos-toggle')
+    const reposRow = await waitFor(
+      'return document.getElementById("repos-row") !== null',
+      value => value === true,
+      5000,
+    )
+    check('the top bar opens the repository row', reposRow === true)
+
+    const currentRepo = await exec(
+      'return (document.getElementById("repos-row")?.textContent ?? "").includes("kwdiff-e2e-")',
+    )
+    check('the row lists the current repository', currentRepo === true)
+
+    await clickOn('#recent-0')
+    const reposClosed = await waitFor(
+      'return document.getElementById("repos-row") === null',
+      value => value === true,
+      5000,
+    )
+    check('choosing a repository closes the row', reposClosed === true)
+
+    const repopulated = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value >= 1,
+      20000,
+    )
+    check('the reopened repository lists commits', repopulated >= 1, `rows=${repopulated}`)
+
+    // 9. The two keys a reviewer presses first: `/` to the search field, and
     //    `enter` one pane deeper.
     await press('/')
     const searchFocus = await waitFor(
@@ -622,7 +651,7 @@ async function main() {
     )
     check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
 
-    // 9. ? opens the keymap (it is read from a raw keydown listener, because
+    // 10. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')

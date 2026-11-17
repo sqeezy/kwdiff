@@ -64,6 +64,7 @@ export const Model = Schema.Struct({
   branches: Schema.Array(Schema.Struct({ root: Schema.String, branch: Schema.String })),
   filters: Filters,
   showFilters: Schema.Boolean,
+  showRepos: Schema.Boolean,
   compare: Endpoints,
   searching: Schema.Boolean,
   searchId: Schema.Number,
