@@ -60,9 +60,10 @@ const fixtureRepo = () => {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), `${lines.join('\n')}\n`)
   }
-  const commit = (subject, date, author = ANTON) => {
+  const commit = (subject, date, author = ANTON, body = null) => {
     git(dir, ['add', '-A'])
-    git(dir, ['commit', '-q', '-m', subject], {
+    const message = body === null ? ['-m', subject] : ['-m', subject, '-m', body]
+    git(dir, ['commit', '-q', ...message], {
       ...author,
       GIT_AUTHOR_DATE: date,
       GIT_COMMITTER_DATE: date,
@@ -100,7 +101,13 @@ const fixtureRepo = () => {
   )
   write('src/app.ts', taller)
   write('src/ui.ts', ['export const view = () => "pierre"'])
-  commit("feat: render the patch with Pierre's CodeView", '2026-01-18T09:00:00')
+  commit("feat: render the patch with Pierre's CodeView", '2026-01-18T09:00:00', ANTON, [
+    'The pane needs a viewer that owns its scroll position.',
+    '',
+    '- one scroller',
+    '- one owner',
+    '- one highlight',
+  ].join('\n'))
 
   return dir
 }
@@ -273,6 +280,20 @@ async function main() {
       value => value > 40,
     )
     check('patch rendered', patchLength > 40, `chars=${patchLength}`)
+
+    // The body strip: the ticked commit's message, collapsed until asked.
+    const bodyText = await waitFor(
+      'return document.getElementById("commit-body")?.textContent ?? ""',
+      value => value.includes('The pane needs a viewer'),
+      10000,
+    )
+    check(
+      'the ticked commit shows its message body',
+      bodyText.includes('The pane needs a viewer'),
+      `body=${JSON.stringify(bodyText.slice(0, 40))}`,
+    )
+    const moreButton = await exec('return document.getElementById("body-toggle") !== null')
+    check('a longer body offers more', moreButton === true)
 
     // 4. One scroller, and it scrolls. This is the regression that cost three
     //    releases: a nested scroll container cannot keep the scrollbar honest.

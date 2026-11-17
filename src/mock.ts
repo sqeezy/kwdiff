@@ -8,6 +8,7 @@ type Fixture = Readonly<{
   date: string
   author: string
   subject: string
+  body?: string
   root: 'main' | 'legacy'
   branches: ReadonlyArray<string>
   files: ReadonlyArray<Omit<FilePatch, 'matched'> & { patch: string }>
@@ -126,6 +127,7 @@ const fixtures: ReadonlyArray<Fixture> = [
     date: '2026-11-02',
     author: 'Yuki Tanaka',
     subject: 'refactor: extract the backoff policy (ABC-123)',
+    body: 'The retry schedule lived inside withRetry, so the matrix could not\nread it.\n\n- one policy\n- one place\n- one test table',
     root: 'main',
     branches: ['main', 'release/4.2'],
     files: [
@@ -308,6 +310,7 @@ const toCommit = (f: Fixture): Commit => ({
   date: f.date,
   author: f.author,
   subject: f.subject,
+  body: f.body ?? '',
 })
 
 const newestFirst = (a: Fixture, b: Fixture) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)

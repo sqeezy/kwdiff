@@ -46,6 +46,8 @@ pub struct Commit {
     pub date: String,
     pub author: String,
     pub subject: String,
+    /// The message body: the part a reviewer reads for the *why*.
+    pub body: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -141,6 +143,39 @@ fn path_args(filters: &Filters) -> Vec<String> {
     } else {
         vec!["--".to_string(), path.to_string()]
     }
+}
+
+// One record per commit, NUL-terminated, fields separated by unit separators:
+// a body is multi-line and may contain tabs, so neither newline nor tab can be
+// the delimiter. `splitn(5, …)` keeps a stray separator inside the body.
+const LOG_FORMAT: &str = "--format=%H%x1f%ad%x1f%an%x1f%s%x1f%b%x00";
+
+fn parse_commits(raw: &str) -> Vec<Commit> {
+    let mut commits: Vec<Commit> = Vec::new();
+    for record in raw.split('\0') {
+        // git appends a newline after each record's terminating NUL.
+        let record = record.trim_matches('\n');
+        if record.is_empty() {
+            continue;
+        }
+        let mut fields = record.splitn(5, '\u{1f}');
+        let (Some(sha), Some(date), Some(author), Some(subject)) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        if commits.iter().any(|commit| commit.sha == sha) {
+            continue;
+        }
+        commits.push(Commit {
+            sha: sha.to_string(),
+            date: date.to_string(),
+            author: author.to_string(),
+            subject: subject.to_string(),
+            body: fields.next().unwrap_or("").trim_matches('\n').to_string(),
+        });
+    }
+    commits
 }
 
 // At most one search runs at a time; a newer id kills the older child.
@@ -355,7 +390,7 @@ pub async fn search(
     args.extend(filter_args(&filters));
     args.extend([
         "--date=short".into(),
-        "--format=%H%x09%ad%x09%an%x09%s".into(),
+        LOG_FORMAT.into(),
         "--max-count=2000".into(),
         "--exclude=refs/stash".into(),
     ]);
@@ -377,7 +412,7 @@ pub async fn search(
         code_args.extend(filter_args(&filters));
         code_args.extend([
             "--date=short".into(),
-            "--format=%H%x09%ad%x09%an%x09%s".into(),
+            LOG_FORMAT.into(),
             "--max-count=2000".into(),
         ]);
         code_args.extend(path_args(&filters));
@@ -385,25 +420,7 @@ pub async fn search(
         raw.push_str(&run_tracked(&state, id, &repo, &code_args).await?);
     }
 
-    let mut commits: Vec<Commit> = Vec::new();
-    for line in raw.lines() {
-        let mut fields = line.split('\t');
-        let (Some(sha), Some(date), Some(author), Some(subject)) =
-            (fields.next(), fields.next(), fields.next(), fields.next())
-        else {
-            continue;
-        };
-        if commits.iter().any(|commit| commit.sha == sha) {
-            continue;
-        }
-        commits.push(Commit {
-            sha: sha.to_string(),
-            date: date.to_string(),
-            author: author.to_string(),
-            subject: subject.to_string(),
-        });
-    }
-    Ok(commits)
+    Ok(parse_commits(&raw))
 }
 
 #[tauri::command]
@@ -594,6 +611,25 @@ mod tests {
     // The bug this guards: with an empty keyword the search passed no -E, so git
     // read the author pattern as a *basic* regex, where `\|` is alternation and
     // a literal filter matched everything instead of nothing.
+    #[test]
+    fn commits_parse_with_multiline_bodies() {
+        let raw = "aaa\u{1f}2026-01-01\u{1f}Anton\u{1f}subject one\u{1f}first line\n\nsecond\twith tab\0\n\
+bbb\u{1f}2026-01-02\u{1f}Bot\u{1f}subject two\u{1f}\0\n";
+        let commits = parse_commits(raw);
+        assert_eq!(commits.len(), 2);
+        assert_eq!(commits[0].body, "first line\n\nsecond\twith tab");
+        assert_eq!(commits[0].subject, "subject one");
+        assert_eq!(commits[1].subject, "subject two");
+        assert!(commits[1].body.is_empty());
+    }
+
+    // -a unions two logs; the same commit can arrive twice.
+    #[test]
+    fn duplicate_commits_are_dropped() {
+        let record = "aaa\u{1f}2026-01-01\u{1f}Anton\u{1f}subject\u{1f}\0\n";
+        assert_eq!(parse_commits(&format!("{record}{record}")).len(), 1);
+    }
+
     #[test]
     fn literals_escape_extended_regex_metacharacters() {
         assert_eq!(literal("anton|dependabot"), "anton\\|dependabot");

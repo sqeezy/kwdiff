@@ -3,6 +3,7 @@ export type Commit = Readonly<{
   date: string
   author: string
   subject: string
+  body: string
 }>
 
 export type FilePatch = Readonly<{

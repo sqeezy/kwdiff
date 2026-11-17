@@ -40,7 +40,9 @@ tabs or multiple repositories; macOS/Linux; code signing; auto-update.
    appears when the selection's commits share no ancestor. With **`-a`** on and
    a keyword, a commit matched by a changed line opens the file that contains it
    (marked with a dot) and the patch at the **hunk that matched**, highlighted
-   by the same active-hunk style `n`/`p` use.
+   by the same active-hunk style `n`/`p` use. The first ticked commit's
+   **message body** sits above the patch (three lines, *more* expands it): it is
+   the part that says why.
 4. Compare two tips: pick a ref in each of the two slots beside the search
    field, or press `f` / `t` to put the commit under the cursor into the from /
    to slot. With both set the panes show `git diff A B` — a tree diff that
@@ -91,6 +93,9 @@ Tauri 2 (Windows x64, WebView2)
 #[tauri::command] async fn refs(repo: String) -> Result<Vec<Ref>, GitError>;
 ```
 
+- A commit record is NUL-terminated with unit separators between fields
+  (`--format=%H%x1f%ad%x1f%an%x1f%s%x1f%b%x00`): a body is multi-line and may
+  contain tabs, so neither a newline nor a tab can be the delimiter.
 - `files` also takes the code search's `needle` (and `regex`): it marks the
   files the pattern occurs in **at the commit** (`git grep -l -i -E -e <p> <sha>`;
   exit 1 is "no match", not a failure), so the pane can open the file that
@@ -114,7 +119,7 @@ Tauri 2 (Windows x64, WebView2)
   `NotARepository { path }`, `Search { message }`, `Io { message }`.
 
 ```ts
-type Commit = { sha: string; date: string; author: string; subject: string }
+type Commit = { sha: string; date: string; author: string; subject: string; body: string }
 type FilePatch = { path: string; added: number; removed: number; isNew: boolean }
 type RootOf = { sha: string; root: string }
 type Ref = { name: string; kind: 'local' | 'remote' | 'tag' }

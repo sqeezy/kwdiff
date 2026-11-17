@@ -1,0 +1,13 @@
+
+> kwdiff@0.6.1 dev
+> vite --port 1420
+
+[foldkit:devTools] MCP relay listening at ws://127.0.0.1:33611/__foldkit/devtools-mcp
+[foldkit:devTools] Cannot publish the MCP relay address: the registry directory /data/user/0/io.piphone/files/home/.cache/foldkit-devtools-relays has a parent directory that another user can replace. Set matching devToolsMcpPort and FOLDKIT_DEVTOOLS_MCP_PORT values for MCP access on a trusted network, or set FOLDKIT_DEVTOOLS_RELAY_DIRECTORY to a directory private to your user.
+error when starting dev server:
+Error: Port 1420 is already in use
+    at httpServerStart (file:///data/user/0/io.piphone/files/home/work/tmp/git-tooling/git-kwdiff/node_modules/vite/dist/node/chunks/node.js:14673:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async startServer (file:///data/user/0/io.piphone/files/home/work/tmp/git-tooling/git-kwdiff/node_modules/vite/dist/node/chunks/node.js:25081:30)
+    at async Object.listen (file:///data/user/0/io.piphone/files/home/work/tmp/git-tooling/git-kwdiff/node_modules/vite/dist/node/chunks/node.js:24887:4)
+    at async CAC.<anonymous> (file:///data/user/0/io.piphone/files/home/work/tmp/git-tooling/git-kwdiff/node_modules/vite/dist/node/cli.js:734:3)
