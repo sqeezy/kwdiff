@@ -3,5 +3,6 @@
   "identifier": "default",
   "description": "The window, its title, and nothing else",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-set-title", "dialog:default"]
+  "permissions": ["core:default",
+    "core:webview:default", "core:window:allow-set-title", "dialog:default"]
 }

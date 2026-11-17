@@ -1159,3 +1159,32 @@ describe('the commit body strip', () => {
     )
   })
 })
+
+// Dropping a folder on the window: the OS path arrives as a message and opens
+// exactly what the picker would have opened.
+describe('a dropped path', () => {
+  test('opens the repository it points at', () => {
+    story(
+      update,
+      given(base),
+      message(Message.DroppedPath({ path: 'C:\\work\\dropped' })),
+      Command.resolve(OpenRepo, Message.OpenedRepo({ name: 'dropped', root: 'C:\\work\\dropped' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      debounceStale,
+      model(m => {
+        expect(m.repo?.root).toBe('C:\\work\\dropped')
+        expect(m.error).toBeNull()
+      }),
+    )
+  })
+
+  test('a path that is not a repository shows the error, not a crash', () => {
+    story(
+      update,
+      given(base),
+      message(Message.DroppedPath({ path: 'C:\\nope' })),
+      Command.resolve(OpenRepo, Message.FailedOpen({ message: 'not a git repository: C:\\nope' })),
+      model(m => expect(m.error?.kind).toBe('not-a-repo')),
+    )
+  })
+})

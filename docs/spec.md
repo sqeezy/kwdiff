@@ -29,7 +29,9 @@ tabs or multiple repositories; macOS/Linux; code signing; auto-update.
 ## Flow
 
 1. Launch opens the last repository, or state 01 with recents and *Open
-   repository…*.
+   repository…*. With a repository open, the name in the top bar opens a row
+   with the picker and the same recents (a dropped folder opens the same way:
+   `dragDropEnabled` hands the path to a `Stream.callback` subscription).
 2. Type a keyword: search after a 250 ms debounce, cancelled on the next
    keystroke; `Enter` runs immediately. The branch filter (default *All refs*)
    narrows the search without clearing ticks. *filters* opens a row of `git log`
