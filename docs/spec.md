@@ -171,7 +171,7 @@ comparison itself never fails on unrelated roots.
 | --- | --- | --- |
 | Nothing open | overlay, panes dimmed | *Open repository…*, recents |
 | No repository here or above | overlay | *Choose another folder…* |
-| git not on PATH | overlay, needs 2.28+ | *How to install git*, *Re-check* |
+| git not on PATH | overlay, needs 2.28+ | *Choose another folder…* (the app re-checks on every open) |
 | No matches | commits pane | echoes keyword and the rule, or the filters with a *Clear filters* action |
 | Filtered away | commits pane | *Search all refs* |
 | Running / cancelled | commits pane | results kept |
@@ -200,9 +200,10 @@ another one opens.
 
 ## Performance
 
-2 000 commits ≈ 400 KB of JSON, one `invoke`. Patches render one file at a time;
-past **5 000** lines the pane says "showing the first 5 000 lines". No
-virtualisation in v1; the cap is the strategy.
+2 000 commits ≈ 400 KB of JSON, one `invoke`. Patches render one file at a time,
+whole. **No truncation notice exists** even though an earlier version of this
+page promised one past 5 000 lines: a very large patch renders in full and is the
+thing to watch if painting ever feels slow. No virtualisation in v1.
 
 ## Tests
 
@@ -236,7 +237,8 @@ Release. No auto-update, no signing.
 - WebView2 accelerator keys cannot be disabled; the key set avoids them.
 - `git` may be missing or old on the colleague's machine: state 03, checked at
   startup.
-- Huge patches arrive as bytes; the 5 000-line notice keeps the pane honest.
+- Huge patches arrive as bytes and render whole; there is no truncation notice
+  (see *Performance*), so a multi-megabyte patch is slow to paint.
 - Foldkit 0.170 is young: pinned, upgraded by its own ticket.
 
 ## Next

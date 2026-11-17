@@ -35,6 +35,22 @@ repository, `npm run dev` runs the UI against the fixture in `src/mock.ts`.
 - **Keys** stay clear of WebView2 accelerators: never bind `Mod+F`, `Mod+P`,
   `Mod+R`, `F5` (tauri#7418).
 
+## Docs
+
+User-facing docs live in the repo and move with the code (docs-as-code): one
+Markdown source, one generated artefact, checked in CI.
+
+- `docs/features.md` is the **reference**: a row per capability with its code
+  anchor and the test that proves it. A user-visible change updates its row in
+  the same PR.
+- `docs/guide.md` is the **hand-out** for the colleague. A change to a flow (a
+  new key, a new control, a new state) updates it in the same PR.
+- `docs/guide.html` is generated — never edit it. `npm run docs` after editing
+  the guide; `npm run docs:check` runs in CI and fails when the HTML is stale or
+  when either page does not name the current `package.json` version.
+- `docs/spec.md` is the **explanation** (decisions, non-goals); the wayfinder map
+  holds the history. Neither is a changelog — that is `CHANGELOG.md`.
+
 ## Tests
 
 `test/update.test.ts` runs `update` through `foldkit/story`. Every Command a

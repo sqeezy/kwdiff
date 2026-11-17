@@ -50,6 +50,17 @@ Build the Windows installer:
 npm run tauri build  # src-tauri/target/release/bundle/nsis/*.exe
 ```
 
+## Docs
+
+- **[The guide](docs/guide.md)** — what the app is and how to use it; a reviewer
+  can read the generated [guide.html](docs/guide.html) with no toolchain.
+- **[The feature map](docs/features.md)** — every capability, where it lives and
+  what proves it. Updated with the ticket that changes it.
+- **[The spec](docs/spec.md)** — the decisions and the non-goals.
+
+`npm run docs` rebuilds the HTML; `npm run docs:check` (run in CI) fails when it
+is stale or the version stamps drift.
+
 ## Shape
 
 ```
