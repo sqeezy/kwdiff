@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-17
+
+Six small things a review tool is measured by once you use it daily.
+
+### Added
+
+- **Another repository without a restart** (ANT-79): the name in the top bar opens
+  a row with *Open repository…* and the recents, the current one in green.
+  `esc` closes it, and opening one closes it.
+- **Refresh** (ANT-80): `r` or the button re-reads the refs and runs the current
+  query again — a fetch during a review is no longer invisible until restart.
+  Ticks, filters and compare endpoints survive.
+- **Line numbers** (ANT-81): every patch line carries the number its hunk header
+  implies, in a `select-none` gutter — the new side for added and context lines,
+  the old side for deleted ones.
+- **The commit message body** (ANT-77): the first ticked commit's message sits
+  above its patch, three lines clamped with *more* to expand. Records are
+  NUL-terminated and unit-separated now, because a body is multi-line.
+- **Drop a folder on the window** (ANT-76): a dropped repository folder (or a
+  file inside one) opens it; a drop that is not a repository shows the existing
+  error, not a crash.
+
+### Fixed
+
+- **File paths lost their `src/`** (ANT-78): rows rendered `path.replace(/^src\//,
+  '')`, so `src/http/retry.ts` read `http/retry.ts` while the pane header showed
+  the full path. Now the directory dims and truncates, the file name stays whole,
+  and the tooltip is the real path.
+- **Switching repositories emptied the list** when a keyword was typed: refs
+  arriving only re-ran the search for an empty field. They now always re-run it.
+
+### Tests
+
+- 89 tests (84 over `update`, 5 over the new patch gutter), 7 Rust unit tests
+  (commit parsing with multi-line bodies, `--numstat`, the argument builders),
+  and 53 e2e checks — the smoke grew the repository row, refresh, the gutter,
+  the body strip and its own fixture body.
+
 ## [0.6.1] - 2026-11-17
 
 ### Fixed
