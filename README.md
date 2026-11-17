@@ -74,8 +74,8 @@ docs/wayfinder/ the decision map this was built from
 ## Status
 
 v1 in progress. Search with filters, the commit checklist with range selection,
-pane and hunk navigation, and two-endpoint compare work today, against 56 story
-tests, 4 Rust unit tests and an e2e gate over the real window that CI runs.
+pane and hunk navigation, and two-endpoint compare work today, against 70 story
+tests, 5 Rust unit tests and an e2e gate over the real window that CI runs.
 
 ## License
 

@@ -625,6 +625,20 @@ mod tests {
         );
     }
 
+    // Binary files report `-` for both counts and must not poison the list.
+    #[test]
+    fn numstat_reads_counts_and_skips_noise() {
+        let raw = "12\t3\tsrc/app.ts\n-\t-\tassets/logo.png\nbroken line\n";
+        assert_eq!(
+            numstat(raw),
+            vec![
+                (12, 3, "src/app.ts".to_string()),
+                (0, 0, "assets/logo.png".to_string()),
+            ],
+        );
+        assert!(numstat("").is_empty());
+    }
+
     #[test]
     fn a_pathspec_goes_after_a_double_dash() {
         let filters = Filters { path: " src/http ".into(), ..Default::default() };

@@ -28,7 +28,7 @@ const endpointsOf = (from: string | null, to: string | null): Endpoints | null =
 
 // ---- commands --------------------------------------------------------------
 
-const PickRepo = Command.define('PickRepo', {
+export const PickRepo = Command.define('PickRepo', {
   messages: [Message.PickedRepo, Message.PickCancelled],
   execute: Effect.promise(() =>
     isTauri()
@@ -43,7 +43,7 @@ const PickRepo = Command.define('PickRepo', {
   ),
 })
 
-const OpenRepo = Command.define('OpenRepo', {
+export const OpenRepo = Command.define('OpenRepo', {
   args: { path: Schema.String },
   messages: [Message.OpenedRepo, Message.FailedOpen],
   execute: ({ path }) =>
@@ -53,7 +53,7 @@ const OpenRepo = Command.define('OpenRepo', {
     ),
 })
 
-const LoadConfig = Command.define('LoadConfig', {
+export const LoadConfig = Command.define('LoadConfig', {
   messages: [Message.SucceededConfig],
   execute:
     Effect.promise(() =>
@@ -222,7 +222,7 @@ const ScrollToHunk = Command.define('ScrollToHunk', {
     ),
 })
 
-const BlurActive = Command.define('BlurActive', {
+export const BlurActive = Command.define('BlurActive', {
   messages: [Message.Blurred],
   execute: Effect.sync(() => {
     const active = document.activeElement
@@ -605,7 +605,14 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     SucceededPatch: ({ id, patch, error }) => {
       if (id !== model.patchId) return { model }
-      const next = modifyFields(model, { patch: () => patch, lastError: () => error })
+      // A shorter patch cannot keep the old hunk highlighted: the pane would
+      // point at a hunk that no longer exists.
+      const last = Math.max(0, hunkCount(patch) - 1)
+      const next = modifyFields(model, {
+        patch: () => patch,
+        lastError: () => error,
+        hunkIndex: index => Math.min(index, last),
+      })
       const needle = needleOf(model)
       if (needle === null || patch === '' || error !== null) return { model: next }
       // `-a` matched a changed line: open the patch where it matched, and let

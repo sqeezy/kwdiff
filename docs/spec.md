@@ -207,8 +207,9 @@ virtualisation in v1; the cap is the strategy.
   regex counts, clear resets, whitespace does not count, escape closes the row).
 - Rust unit tests (`cargo test --lib`) over the arguments git receives: the ERE
   escaping for literals, an author pattern only when regex is on, the
-  `until`-covers-its-day rule, and the pathspec after `--`. A fixture-repository
-  suite is still missing (the spec claimed one before it existed).
+  `until`-covers-its-day rule, the pathspec after `--`, and `--numstat` parsing
+  (binary files, junk lines). A fixture-repository suite is still missing (the
+  spec claimed one before it existed).
 - The e2e (`e2e/smoke.mjs`) drives the real window through `tauri-driver` and is
   **a gate**: 38 checks over the commit list, search, ticks, the patch pane (one
   scroller, PageDown), a file click, line scrolling and hunk stepping, the pane
