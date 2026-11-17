@@ -533,6 +533,9 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     // request.
     ToggledBody: () => ({ model: modifyFields(model, { bodyExpanded: () => !model.bodyExpanded }) }),
 
+    // A capped patch can be shown whole; a new patch collapses it again.
+    ToggledFullPatch: () => ({ model: modifyFields(model, { fullPatch: () => !model.fullPatch }) }),
+
     // A fetch is the usual reason a review goes stale. Re-read the refs — the
     // part the search cannot see — and `SucceededRefs` re-runs the query with
     // whatever the field and filters say, keeping the ticks.
@@ -665,6 +668,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         patch: () => patch,
         lastError: () => error,
         hunkIndex: index => Math.min(index, last),
+        fullPatch: () => false,
       })
       const needle = needleOf(model)
       if (needle === null || patch === '' || error !== null) return { model: next }
@@ -862,6 +866,7 @@ const emptyModel: Model = {
   showFilters: false,
   showRepos: false,
   bodyExpanded: false,
+  fullPatch: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 0,

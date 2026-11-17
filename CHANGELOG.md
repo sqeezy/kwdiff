@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-17
+
+### Added
+
+- **A capped patch says so** (the decision the docs pass asked for): a file whose
+  patch exceeds **5 000** rendered lines shows a bar — *showing the first 5 000
+  of N lines* — with **show all**, which renders the rest. A new patch starts
+  capped, so a generated or vendored file cannot freeze the window by default,
+  and nothing is ever hidden silently. 2 story tests, `cappedRows` unit tests,
+  and two e2e checks over a 6 000-line fixture file.
+- **A feature map and a guide** (PR #18): `docs/features.md` is the reference (a
+  row per capability, its code anchor and the test that proves it),
+  `docs/guide.md` the hand-out for the colleague, `docs/guide.html` generated and
+  self-contained. `npm run docs:check` runs in CI and fails when the HTML is
+  stale or the version stamps drift.
+
+### Fixed
+
+- Two claims in `docs/spec.md` that were never true: the 5 000-line notice (now
+  it is), and the git-missing card offering *Choose another folder…* rather than
+  an install link and a re-check.
+
 ## [0.7.0] - 2026-11-17
 
 Six small things a review tool is measured by once you use it daily.

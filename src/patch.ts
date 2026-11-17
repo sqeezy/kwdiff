@@ -77,3 +77,17 @@ export const numberedLines = (patch: string): ReadonlyArray<PatchLine> => {
 
   return rows
 }
+
+// A very large patch is capped for the pane's sake — a generated file can run to
+// tens of thousands of lines, and every line is two elements. The cap is shown
+// and reversible: the pane says how many lines it is hiding, and *show all*
+// renders the rest. Hiding without saying so would be worse than being slow.
+export const PATCH_LINE_CAP = 5000
+
+export const cappedRows = (
+  rows: ReadonlyArray<PatchLine>,
+  expanded: boolean,
+): Readonly<{ rows: ReadonlyArray<PatchLine>; hidden: number }> =>
+  expanded || rows.length <= PATCH_LINE_CAP
+    ? { rows, hidden: 0 }
+    : { rows: rows.slice(0, PATCH_LINE_CAP), hidden: rows.length - PATCH_LINE_CAP }

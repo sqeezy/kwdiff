@@ -66,6 +66,7 @@ const base: Model = {
   showFilters: false,
   showRepos: false,
   bodyExpanded: false,
+  fullPatch: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 1,
@@ -1185,6 +1186,32 @@ describe('a dropped path', () => {
       message(Message.DroppedPath({ path: 'C:\\nope' })),
       Command.resolve(OpenRepo, Message.FailedOpen({ message: 'not a git repository: C:\\nope' })),
       model(m => expect(m.error?.kind).toBe('not-a-repo')),
+    )
+  })
+})
+
+// A capped patch: *show all* renders the rest, and a new patch starts capped.
+describe('a capped patch', () => {
+  test('show all toggles', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledFullPatch()),
+      model(m => expect(m.fullPatch).toBe(true)),
+      message(Message.ToggledFullPatch()),
+      model(m => expect(m.fullPatch).toBe(false)),
+    )
+  })
+
+  test('the next patch arrives capped', () => {
+    story(
+      update,
+      given({ ...base, fullPatch: true, patchId: 2 }),
+      message(Message.SucceededPatch({ id: 2, patch: '@@ -1 +1 @@\n+x', error: null })),
+      model(m => {
+        expect(m.fullPatch).toBe(false)
+        expect(m.patch).toBe('@@ -1 +1 @@\n+x')
+      }),
     )
   })
 })

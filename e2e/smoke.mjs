@@ -83,6 +83,10 @@ const fixtureRepo = () => {
     commit(`feat: feature ${i}`, `2026-01-${String(5 + i).padStart(2, '0')}T09:00:00`)
   }
 
+  // Past the pane's 5 000-line cap, so a run can see the notice and expand it.
+  write('vendor/table.ts', Array.from({ length: 6000 }, (_, i) => `export const row${i} = ${i}`))
+  commit('chore: vendor the lookup table', '2026-01-17T12:00:00')
+
   write('src/http/retry.ts', ['export const retry = () => 1'])
   commit('fix: retry once on gateway 502', '2026-01-16T09:00:00')
 
@@ -675,7 +679,48 @@ async function main() {
     )
     check('the reopened repository lists commits', repopulated >= 1, `rows=${repopulated}`)
 
-    // 9. Refresh: the window re-reads git and the list survives it.
+    // 9. A patch past the cap says so and can be shown whole.
+    await setField('#kw-search', 'vendor the lookup table')
+    // Wait for the row itself, not for a count: the previous keyword also had
+    // exactly one row, so a count passes before the new search lands.
+    const vendorRow = await waitFor(
+      'return [...document.querySelectorAll("#commit-list li")].some(li => (li.textContent || "").includes("vendor the lookup table"))',
+      value => value === true,
+      20000,
+    )
+    check('the vendored commit is found', vendorRow === true)
+    await clickOn('#commit-list li button')
+    // The file list arrives after the tick; open the vendored file explicitly.
+    const tableReady = await waitFor(
+      'return [...document.querySelectorAll("#file-list li")].some(li => (li.textContent || "").includes("table.ts"))',
+      value => value === true,
+      20000,
+    )
+    check('the vendored file is in the list', tableReady === true)
+    await exec(`
+      const rows = [...document.querySelectorAll("#file-list li")];
+      const row = rows.find(li => (li.textContent || "").includes("table.ts"));
+      if (row) row.querySelector("button").click();
+    `)
+    const cappedBar = await waitFor(
+      'return document.getElementById("patch-cap")?.textContent ?? ""',
+      value => value.includes('first'),
+      30000,
+    )
+    check(
+      'a patch past 5 000 lines says what it hides',
+      cappedBar.includes('first') && cappedBar.includes('6'),
+      `bar=${JSON.stringify(cappedBar.slice(0, 48))}`,
+    )
+    await clickOn('#patch-cap-toggle')
+    const expandedBar = await waitFor(
+      'return document.getElementById("patch-cap")?.textContent ?? ""',
+      value => value.includes('all'),
+      30000,
+    )
+    check('show all renders the rest', expandedBar.includes('all'), `bar=${expandedBar.slice(0, 24)}`)
+
+    // 10. Refresh: the window re-reads git and the list survives it.
     await press('r')
     await sleep(600)
     const refreshed = await waitFor(
@@ -685,7 +730,7 @@ async function main() {
     )
     check('refresh keeps a populated list', refreshed >= 1, `rows=${refreshed}`)
 
-    // 10. The two keys a reviewer presses first: `/` to the search field, and
+    // 11. The two keys a reviewer presses first: `/` to the search field, and
     //    `enter` one pane deeper.
     await press('/')
     const searchFocus = await waitFor(
@@ -703,7 +748,7 @@ async function main() {
     )
     check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
 
-    // 11. ? opens the keymap (it is read from a raw keydown listener, because
+    // 12. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')
