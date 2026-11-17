@@ -254,6 +254,17 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         ]),
         h.button(
           [
+            h.Attribute('id', 'refresh'),
+            h.OnClick(Message.Refreshed()),
+            h.Attribute('title', 'Re-read the refs and run the search again (r)'),
+            h.Class(
+              'rounded border border-[#2b3543] px-1.5 py-1 font-mono text-[11px] text-[#7d8b9e] hover:border-[#3fb950] hover:text-[#3fb950]',
+            ),
+          ],
+          ['refresh'],
+        ),
+        h.button(
+          [
             h.OnClick(Message.ToggledKeymap()),
             h.Attribute('aria-label', 'Keyboard shortcuts'),
             h.Attribute('title', 'Keyboard shortcuts (?)'),
@@ -754,6 +765,7 @@ const keymapRows: ReadonlyArray<readonly [string, string]> = [
   ['g / shift+g', 'first / last hunk'],
   ['f / t', 'compare from / to the commit under the cursor'],
   ['x', 'swap the two compared endpoints'],
+  ['r', 're-read the refs and run the search again'],
   ['/', 'jump to the search field'],
   ['?', 'this list'],
 ]

@@ -1072,3 +1072,36 @@ describe('refs arriving', () => {
     expect(out.commands).toBeUndefined()
   })
 })
+
+// A fetch is the usual reason a review goes stale: refresh re-reads the refs
+// and lets them re-run the query, keeping the ticks.
+describe('refresh', () => {
+  test('refresh asks for the refs under a new generation', () => {
+    const out = update({ ...base, searchId: 3, searching: false }, Message.Refreshed())
+    const command = out.commands?.[0] as { name: string; args?: Record<string, unknown> } | undefined
+    expect(command?.name).toBe('LoadRefs')
+    expect(command?.args).toEqual({ repo: base.repo?.root })
+    expect(out.model.searchId).toBe(4)
+    expect(out.model.searching).toBe(true)
+  })
+
+  test('the refs re-run the query and keep the ticks', () => {
+    story(
+      update,
+      given({ ...base, selectedShas: ['c1a4f2e'], searchId: 3, searching: true }),
+      message(Message.Refreshed()),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [{ name: 'main', kind: 'local' }] })),
+      debounceStale,
+      model(m => {
+        expect(m.selectedShas).toEqual(['c1a4f2e'])
+        expect(m.refs.map(ref => ref.name)).toEqual(['main'])
+        expect(m.searching).toBe(true)
+      }),
+    )
+  })
+
+  test('no repository, nothing to refresh', () => {
+    const out = update({ ...base, repo: null }, Message.Refreshed())
+    expect(out.commands).toBeUndefined()
+  })
+})
