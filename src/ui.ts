@@ -3,6 +3,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Message } from './message'
 import { activeFilterCount } from './model'
 import type { Model } from './model'
+import { numberedLines } from './patch'
 import type { Endpoints } from './types'
 
 const bg = 'bg-[#0b0e14] text-[#c9d1d9]'
@@ -734,23 +735,51 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 // The patch is rendered as hunks so the keyboard can jump between them: each
 // '@@' opens a hunk with an id the scroll command focuses.
+// The patch as numbered rows: a gutter with the side's line number, then the
+// text. The number is decoration (select-none, not in the text span), so copying
+// a patch never carries it along.
 const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   let hunk = -1
-  return patch.split('\n').map(text => {
-    if (text.startsWith('@@')) hunk += 1
-    const isHunk = text.startsWith('@@')
+  return numberedLines(patch).map(row => {
+    const isHunk = row.kind === 'hunk'
+    if (isHunk) hunk += 1
     const active = isHunk && hunk === activeHunk
+    const number = row.newLine ?? row.oldLine
+    const classes =
+      row.kind === 'del'
+        ? 'bg-[#2d1417] text-[#f0a19b]'
+        : row.kind === 'add'
+          ? 'bg-[#0f2a1d] text-[#8fe0ad]'
+          : row.kind === 'hunk'
+            ? active
+              ? 'bg-[#1d3350] text-[#c9e2ff]'
+              : lineClass(row.text)
+            : lineClass(row.text)
     return h.div(
       isHunk
         ? [
             h.Attribute('id', `hunk-${hunk}`),
             h.Attribute('tabindex', '-1'),
-            h.Class(
-              `whitespace-pre px-3 outline-none ${active ? 'bg-[#1d3350] text-[#c9e2ff]' : lineClass(text)}`,
-            ),
+            h.Class(`flex gap-2 whitespace-pre px-3 outline-none ${classes}`),
           ]
-        : [h.Class(`whitespace-pre px-3 ${lineClass(text)}`)],
-      [text],
+        : [
+            ...(row.newLine === null ? [] : [h.Attribute('data-new', String(row.newLine))]),
+            ...(row.oldLine === null ? [] : [h.Attribute('data-old', String(row.oldLine))]),
+            h.Class(`flex gap-2 whitespace-pre px-3 ${classes}`),
+          ],
+      [
+        h.span(
+          [
+            h.Attribute('aria-hidden', 'true'),
+            h.Class(
+              'w-9 shrink-0 select-none text-right tabular-nums text-[#8b98a9]' +
+                (row.kind === 'del' ? ' opacity-70' : ''),
+            ),
+          ],
+          [number === null ? '' : String(number)],
+        ),
+        h.span([], [row.text]),
+      ],
     )
   })
 }
