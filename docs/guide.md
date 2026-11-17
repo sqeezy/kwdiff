@@ -1,6 +1,6 @@
 # kwdiff — a review window for branches that share no ancestor
 
-*For kwdiff 0.7.0 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
+*For kwdiff 0.8.0 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
 
 ## What it is
 
@@ -132,8 +132,8 @@ omission — the reasoning is in `docs/spec.md`.
 ## Limits worth knowing
 
 - 2 000 commits per search; narrow with a keyword or the filters.
-- One file's patch at a time, rendered whole — a very large patch is slow to
-  paint.
+- One file's patch at a time. Past 5 000 lines the pane shows the first 5 000
+  with a **show all** button; a very large patch takes a moment to paint.
 - Windows 10/11 only, 64-bit.
 
 ## Telling me what you think

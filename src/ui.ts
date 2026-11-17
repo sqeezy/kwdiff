@@ -3,7 +3,8 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Message } from './message'
 import { activeFilterCount } from './model'
 import type { Model } from './model'
-import { numberedLines } from './patch'
+import { PATCH_LINE_CAP, cappedRows, numberedLines } from './patch'
+import type { PatchLine } from './patch'
 import type { Endpoints } from './types'
 
 const bg = 'bg-[#0b0e14] text-[#c9d1d9]'
@@ -79,6 +80,10 @@ const filterField = (
     ]),
   ])
 
+// 5 000 reads better than 5000 in a sentence about lines.
+const formatLines = (count: number): string =>
+  count.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009')
+
 // Two endpoints make a tree diff; one or none is the tick mode.
 const endpointsOf = (model: Model): Endpoints | null =>
   model.compare.from !== null && model.compare.to !== null
@@ -149,6 +154,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
     model.selectedShas.length === 0
       ? undefined
       : model.commits.find(commit => commit.sha === model.selectedShas[0])
+  const patchRows = model.patch === null ? [] : numberedLines(model.patch)
+  const capped = cappedRows(patchRows, model.fullPatch)
   const noMatch =
     model.commits.length === 0 &&
     !model.searching &&
@@ -659,6 +666,31 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                     : h.span([]),
                 ],
               ),
+          patchRows.length > PATCH_LINE_CAP
+            ? h.div(
+                [
+                  h.Attribute('id', 'patch-cap'),
+                  h.Class(
+                    `flex items-center gap-2 border-b ${border} bg-[#131720] px-3 py-1 font-mono text-[10.5px] ${dim}`,
+                  ),
+                ],
+                [
+                  capped.hidden === 0
+                    ? `all ${formatLines(patchRows.length)} lines`
+                    : `showing the first ${formatLines(capped.rows.length)} of ${formatLines(patchRows.length)} lines`,
+                  h.button(
+                    [
+                      h.Attribute('id', 'patch-cap-toggle'),
+                      h.OnClick(Message.ToggledFullPatch()),
+                      h.Class(
+                        'rounded border border-[#2b3543] px-1.5 py-0.5 font-mono text-[10px] text-[#9aa7b8] hover:border-[#3fb950] hover:text-[#3fb950]',
+                      ),
+                    ],
+                    [capped.hidden === 0 ? 'show the first' : 'show all'],
+                  ),
+                ],
+              )
+            : h.span([]),
           model.patch === null
             ? h.p([h.Class(`px-4 py-10 text-center font-mono text-[11.5px] ${quiet}`)], [
                 compare !== null && model.lastError === null
@@ -678,7 +710,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                     'min-h-0 flex-1 overflow-auto py-1.5 font-mono text-[11.5px] leading-[1.6] outline-none focus-visible:ring-1 focus-visible:ring-[#3fb950]',
                   ),
                 ],
-                renderPatch(model.patch, model.hunkIndex, h),
+                renderPatch(capped.rows, model.hunkIndex, h),
               ),
         ]),
 
@@ -784,9 +816,13 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 // The patch as numbered rows: a gutter with the side's line number, then the
 // text. The number is decoration (select-none, not in the text span), so copying
 // a patch never carries it along.
-const renderPatch = (patch: string, activeHunk: number, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+const renderPatch = (
+  rows: ReadonlyArray<PatchLine>,
+  activeHunk: number,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => {
   let hunk = -1
-  return numberedLines(patch).map(row => {
+  return rows.map(row => {
     const isHunk = row.kind === 'hunk'
     if (isHunk) hunk += 1
     const active = isHunk && hunk === activeHunk

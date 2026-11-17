@@ -30,6 +30,7 @@ export const Message = defineMessageUnion({
   ToggledRepos: {},
   Refreshed: {},
   ToggledBody: {},
+  ToggledFullPatch: {},
   DroppedPath: { path: Schema.String },
   SucceededSearch: { id: Schema.Number, commits: Schema.Array(Commit) },
   FailedSearch: { id: Schema.Number, message: Schema.String },

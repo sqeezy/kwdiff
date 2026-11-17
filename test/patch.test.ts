@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { numberedLines } from '../src/patch'
+import { PATCH_LINE_CAP, cappedRows, numberedLines } from '../src/patch'
 
 describe('numberedLines', () => {
   test('numbers context, added and deleted lines across two hunks', () => {
@@ -83,5 +83,28 @@ describe('numberedLines', () => {
   test('an empty patch is no rows', () => {
     expect(numberedLines('')).toHaveLength(1)
     expect(numberedLines('')[0]?.kind).toBe('meta')
+  })
+})
+
+describe('cappedRows', () => {
+  const rows = (count: number) => numberedLines(`@@ -1,${count} +1,${count} @@\n${' x\n'.repeat(count)}`)
+
+  test('a patch under the cap is not touched', () => {
+    const all = rows(40)
+    expect(cappedRows(all, false)).toEqual({ rows: all, hidden: 0 })
+  })
+
+  test('past the cap the rest is hidden and counted', () => {
+    const all = rows(PATCH_LINE_CAP + 12)
+    const capped = cappedRows(all, false)
+    expect(capped.rows).toHaveLength(PATCH_LINE_CAP)
+    expect(capped.hidden).toBeGreaterThan(0)
+    expect(cappedRows(all, true)).toEqual({ rows: all, hidden: 0 })
+  })
+
+  test('exactly at the cap is not capped', () => {
+    const all = rows(PATCH_LINE_CAP)
+    expect(all.length).toBeGreaterThanOrEqual(PATCH_LINE_CAP)
+    expect(cappedRows(all.slice(0, PATCH_LINE_CAP), false).hidden).toBe(0)
   })
 })

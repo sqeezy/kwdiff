@@ -200,10 +200,11 @@ another one opens.
 
 ## Performance
 
-2 000 commits ≈ 400 KB of JSON, one `invoke`. Patches render one file at a time,
-whole. **No truncation notice exists** even though an earlier version of this
-page promised one past 5 000 lines: a very large patch renders in full and is the
-thing to watch if painting ever feels slow. No virtualisation in v1.
+2 000 commits ≈ 400 KB of JSON, one `invoke`. Patches render one file at a time.
+Past **5 000** rendered lines the pane shows a bar — *showing the first 5 000 of
+N lines* — with *show all*, which renders the rest; a new patch starts capped, so
+a generated file cannot freeze the window by default and nothing is hidden
+silently. No virtualisation in v1: the visible cap is the strategy.
 
 ## Tests
 

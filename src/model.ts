@@ -67,6 +67,7 @@ export const Model = Schema.Struct({
   showFilters: Schema.Boolean,
   showRepos: Schema.Boolean,
   bodyExpanded: Schema.Boolean,
+  fullPatch: Schema.Boolean,
   compare: Endpoints,
   searching: Schema.Boolean,
   searchId: Schema.Number,

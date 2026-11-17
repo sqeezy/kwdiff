@@ -1,6 +1,6 @@
 # kwdiff — feature map
 
-*For kwdiff 0.7.0. Everything the app does today, where it lives, and what
+*For kwdiff 0.8.0. Everything the app does today, where it lives, and what
 proves it.*
 
 This is the **reference** page: complete, terse, one row per capability. The
@@ -84,6 +84,7 @@ How to read a row:
 | Lines | `j`/`k` and the arrows scroll by lines (rendered line height) | `app.ts · ScrollDiffLines` | diff scrolling (3), e2e |
 | Roots divider | shown only when the selection spans more than one root | `app.ts · roots`, `ui.ts` | two roots are kept… |
 | Errors | git's message appears above the patch, never a blank pane | `ui.ts` alert, `app.ts · lastError` | failures are visible (3) |
+| Cap | past 5 000 lines the pane says *showing the first 5 000 of N lines* and offers *show all*; a new patch starts capped | `patch.ts · cappedRows`, `ui.ts` cap bar | `test/patch.test.ts` (cappedRows), a capped patch (2), e2e |
 | Commit body | the first ticked commit's message above the patch, 3 lines with *more* | `ui.ts` body strip, `app.ts · ToggledBody` | the commit body strip (3), e2e |
 
 ## 7. Comparing two tips
@@ -132,7 +133,7 @@ How to read a row:
 | Limit | Value | Consequence |
 | --- | --- | --- |
 | Commits per search | 2 000 | narrow the keyword or the filters |
-| Patch rendering | whole file, no virtualisation | a very large patch is slow to paint; **no truncation notice is implemented** although `spec.md` once promised one |
+| Patch rendering | one file at a time, capped at **5 000** lines with a visible notice and *show all* | a larger patch needs one click to be read whole; no virtualisation |
 | Files | one at a time | ticks select commits, not files |
 | Windows only | WebView2 (Windows 10/11 x64) | macOS/Linux are out of scope |
 | Signing | none | SmartScreen warns once per download; Smart App Control blocks it |
@@ -149,8 +150,8 @@ macOS/Linux, signing and auto-update (Later). The reasoning is in
 
 | Suite | Count | Command |
 | --- | --- | --- |
-| Update loop | 84 | `npm test` |
-| Patch gutter | 5 | `npm test` |
+| Update loop | 87 | `npm test` |
+| Patch gutter and cap | 7 | `npm test` |
 | Rust unit tests | 7 | `cargo test --manifest-path src-tauri/Cargo.toml --lib` |
-| Window e2e (gate) | 53 checks | `npm run e2e` (needs a desktop session) |
+| Window e2e (gate) | 55 checks | `npm run e2e` (needs a desktop session) |
 | Docs | this map, the guide and the built HTML agree | `npm run docs:check` |
