@@ -498,6 +498,17 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     // Opening the panel puts the caret in the first field: the search box keeps
     // focus otherwise, and every single-key shortcut would type into it.
+    // A fetch is the usual reason a review goes stale. Re-read the refs — the
+    // part the search cannot see — and `SucceededRefs` re-runs the query with
+    // whatever the field and filters say, keeping the ticks.
+    Refreshed: () =>
+      model.repo === null
+        ? { model }
+        : {
+            model: modifyFields(model, { searchId: id => id + 1, searching: () => true }),
+            commands: [LoadRefs({ repo: model.repo.root })],
+          },
+
     // The recents live under the top bar, like the filters: one row, no overlay
     // to click away.
     ToggledRepos: () => ({ model: modifyFields(model, { showRepos: () => !model.showRepos }) }),
@@ -867,6 +878,7 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 'f', mapEvent: () => Message.UsedCommitAsEndpoint({ slot: 'from' }) },
         { keys: 't', mapEvent: () => Message.UsedCommitAsEndpoint({ slot: 'to' }) },
         { keys: 'x', mapEvent: () => Message.SwappedEndpoints() },
+        { keys: 'r', mapEvent: () => Message.Refreshed() },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
       ],

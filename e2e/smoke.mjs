@@ -633,7 +633,17 @@ async function main() {
     )
     check('the reopened repository lists commits', repopulated >= 1, `rows=${repopulated}`)
 
-    // 9. The two keys a reviewer presses first: `/` to the search field, and
+    // 9. Refresh: the window re-reads git and the list survives it.
+    await press('r')
+    await sleep(600)
+    const refreshed = await waitFor(
+      'return document.querySelectorAll("#commit-list [role=checkbox]").length',
+      value => value >= 1,
+      20000,
+    )
+    check('refresh keeps a populated list', refreshed >= 1, `rows=${refreshed}`)
+
+    // 10. The two keys a reviewer presses first: `/` to the search field, and
     //    `enter` one pane deeper.
     await press('/')
     const searchFocus = await waitFor(
@@ -651,7 +661,7 @@ async function main() {
     )
     check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
 
-    // 10. ? opens the keymap (it is read from a raw keydown listener, because
+    // 11. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')
