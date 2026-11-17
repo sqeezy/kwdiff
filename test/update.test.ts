@@ -25,8 +25,20 @@ import type { Model } from '../src/model'
 const repo = { name: 'acme-api', root: 'C:\\work\\acme-api' }
 
 const commits = [
-  { sha: 'c1a4f2e', date: '2019-04-12', author: 'Petra', subject: 'fix: retry (ABC-123)' },
-  { sha: 'e3f1a07', date: '2026-11-02', author: 'Yuki', subject: 'refactor: policy (ABC-123)' },
+  {
+    sha: 'c1a4f2e',
+    date: '2019-04-12',
+    author: 'Petra',
+    subject: 'fix: retry (ABC-123)',
+    body: '',
+  },
+  {
+    sha: 'e3f1a07',
+    date: '2026-11-02',
+    author: 'Yuki',
+    subject: 'refactor: policy (ABC-123)',
+    body: 'Why: the schedule was inline.\n\n- one\n- two',
+  },
 ]
 
 const base: Model = {
@@ -53,6 +65,7 @@ const base: Model = {
   filters: { ...noFilters },
   showFilters: false,
   showRepos: false,
+  bodyExpanded: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 1,
@@ -171,7 +184,9 @@ describe('search', () => {
       message(
         Message.SucceededSearch({
           id: 4,
-          commits: [{ sha: 'aaaaaaa', date: '2020-01-01', author: 'x', subject: 'old' }],
+          commits: [
+            { sha: 'aaaaaaa', date: '2020-01-01', author: 'x', subject: 'old', body: '' },
+          ],
         }),
       ),
       model(m => {
@@ -1103,5 +1118,44 @@ describe('refresh', () => {
   test('no repository, nothing to refresh', () => {
     const out = update({ ...base, repo: null }, Message.Refreshed())
     expect(out.commands).toBeUndefined()
+  })
+})
+
+// The message body is the part a reviewer reads for the *why*: the strip above
+// the patch shows it, collapsed until asked.
+describe('the commit body strip', () => {
+  test('a new selection collapses it again', () => {
+    story(
+      update,
+      given({ ...base, bodyExpanded: true }),
+      message(Message.ToggledCommit({ sha: 'e3f1a07' })),
+      selectionResolved,
+      model(m => {
+        expect(m.bodyExpanded).toBe(false)
+        expect(m.selectedShas).toEqual(['e3f1a07'])
+      }),
+    )
+  })
+
+  test('the toggle expands and collapses', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ToggledBody()),
+      model(m => expect(m.bodyExpanded).toBe(true)),
+      message(Message.ToggledBody()),
+      model(m => expect(m.bodyExpanded).toBe(false)),
+    )
+  })
+
+  test('opening another repository collapses it', () => {
+    story(
+      update,
+      given({ ...base, bodyExpanded: true }),
+      message(Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      debounceStale,
+      model(m => expect(m.bodyExpanded).toBe(false)),
+    )
   })
 })

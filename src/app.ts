@@ -373,7 +373,11 @@ const reload = (model: Model) => {
 // A tick is a selection change. While comparing, the tree diff owns the panes
 // and the ticks wait: no load, no blank patch.
 const withSelection = (model: Model, selectedShas: ReadonlyArray<string>) => {
-  const next = modifyFields(model, { selectedShas: () => [...selectedShas] })
+  // A new selection is a new message to read: the body strip collapses again.
+  const next = modifyFields(model, {
+    selectedShas: () => [...selectedShas],
+    bodyExpanded: () => false,
+  })
   return endpointsOf(next.compare.from, next.compare.to) === null
     ? reload(next)
     : { model: next, commands: [] }
@@ -434,6 +438,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         compare: () => ({ from: null, to: null }),
         filters: () => ({ ...noFilters }),
         showRepos: () => false,
+        bodyExpanded: () => false,
         selectionId: id => id + 1,
       })
       return {
@@ -498,6 +503,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     // Opening the panel puts the caret in the first field: the search box keeps
     // focus otherwise, and every single-key shortcut would type into it.
+    // The body strip above the patch: three lines by default, all of it on
+    // request.
+    ToggledBody: () => ({ model: modifyFields(model, { bodyExpanded: () => !model.bodyExpanded }) }),
+
     // A fetch is the usual reason a review goes stale. Re-read the refs — the
     // part the search cannot see — and `SucceededRefs` re-runs the query with
     // whatever the field and filters say, keeping the ticks.
@@ -826,6 +835,7 @@ const emptyModel: Model = {
   filters: { ...noFilters },
   showFilters: false,
   showRepos: false,
+  bodyExpanded: false,
   compare: { from: null, to: null },
   searching: false,
   searchId: 0,

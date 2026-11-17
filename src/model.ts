@@ -10,6 +10,7 @@ export const Commit = Schema.Struct({
   date: Schema.String,
   author: Schema.String,
   subject: Schema.String,
+  body: Schema.String,
 })
 export const FilePatch = Schema.Struct({
   path: Schema.String,
@@ -65,6 +66,7 @@ export const Model = Schema.Struct({
   filters: Filters,
   showFilters: Schema.Boolean,
   showRepos: Schema.Boolean,
+  bodyExpanded: Schema.Boolean,
   compare: Endpoints,
   searching: Schema.Boolean,
   searchId: Schema.Number,

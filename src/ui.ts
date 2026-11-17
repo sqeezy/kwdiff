@@ -143,6 +143,12 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
   const allTicked = model.commits.length > 0 && selected.length === model.commits.length
   const compare = endpointsOf(model)
   const filterCount = activeFilterCount(model.filters)
+  // The body strip belongs to the first ticked commit: the one whose patch
+  // opens first in the pane.
+  const ticked =
+    model.selectedShas.length === 0
+      ? undefined
+      : model.commits.find(commit => commit.sha === model.selectedShas[0])
   const noMatch =
     model.commits.length === 0 &&
     !model.searching &&
@@ -613,6 +619,46 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                 ],
               )
             : h.span([]),
+          ticked === undefined
+            ? h.span([])
+            : h.div(
+                [
+                  h.Attribute('id', 'commit-body'),
+                  h.Class(`border-b ${border} ${panel} px-3 py-1.5`),
+                ],
+                [
+                  h.div([h.Class('flex items-baseline gap-2')], [
+                    h.span([h.Class(`shrink-0 font-mono text-[10.5px] ${quiet}`)], [ticked.sha]),
+                    h.span([h.Class('truncate text-[12px] font-semibold text-[#e6edf3]')], [
+                      ticked.subject,
+                    ]),
+                  ]),
+                  ticked.body === ''
+                    ? h.span([])
+                    : h.p(
+                        [
+                          h.Class(
+                            `mt-1 whitespace-pre-wrap font-mono text-[10.5px] leading-4 ${dim} ${
+                              model.bodyExpanded ? '' : 'line-clamp-3'
+                            }`,
+                          ),
+                        ],
+                        [ticked.body],
+                      ),
+                  ticked.body.split('\n').length > 3
+                    ? h.button(
+                        [
+                          h.Attribute('id', 'body-toggle'),
+                          h.OnClick(Message.ToggledBody()),
+                          h.Class(
+                            'mt-1 rounded border border-[#2b3543] px-1.5 py-0.5 font-mono text-[10px] text-[#9aa7b8] hover:border-[#3fb950] hover:text-[#3fb950]',
+                          ),
+                        ],
+                        [model.bodyExpanded ? 'less' : 'more'],
+                      )
+                    : h.span([]),
+                ],
+              ),
           model.patch === null
             ? h.p([h.Class(`px-4 py-10 text-center font-mono text-[11.5px] ${quiet}`)], [
                 compare !== null && model.lastError === null
