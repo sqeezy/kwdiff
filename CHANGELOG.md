@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-17
+
+### Fixed
+
+- A shorter patch pulls the highlighted hunk back into range: selecting a file or
+  commit with fewer hunks no longer leaves `hunkIndex` pointing at a hunk that is
+  not there.
+
+### Tests
+
+- **A coverage pass before 1.0.** Story tests 56 → **70**, aimed at the handlers
+  nothing had ever exercised: startup (config → reopen the last repository → the
+  remembered branch), the open button and its picker, a failed open, a failed
+  search and its stale-generation guard, the `-a` toggle's Command args, clicking
+  a file (new patch id), a patch from an older request, `enter`/`shift`/blur, the
+  shunt of a shorter patch, and no-last-repository startup. Four Commands that
+  tests now resolve were exported for it (`PickRepo`, `OpenRepo`, `LoadConfig`,
+  `BlurActive`); they were module-private before.
+- **Rust**: 5 unit tests — `numstat` parsing (binary files report `-`, junk lines
+  are skipped) joins the argument tests.
+- **e2e**: **44 checks** — `/` focuses the search field and `enter` walks one
+  pane deeper, the two keys a reviewer presses first and neither was covered.
+
 ## [0.6.0] - 2026-11-16
 
 ### Added

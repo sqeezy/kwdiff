@@ -604,7 +604,25 @@ async function main() {
     )
     check('the patch opens at the hunk that matched', jumped === 2, `active=${jumped}`)
 
-    // 8. ? opens the keymap (it is read from a raw keydown listener, because
+    // 8. The two keys a reviewer presses first: `/` to the search field, and
+    //    `enter` one pane deeper.
+    await press('/')
+    const searchFocus = await waitFor(
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"',
+      value => value === 'kw-search',
+      5000,
+    )
+    check('slash focuses the search field', searchFocus === 'kw-search', `focus=${searchFocus}`)
+
+    await press('Enter')
+    const entered = await waitFor(
+      'return document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : "none"',
+      value => value === 'commit-list',
+      5000,
+    )
+    check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
+
+    // 9. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')
@@ -619,7 +637,15 @@ async function main() {
     await http(`/session/${sid}`, 'DELETE')
   } finally {
     driver.kill()
-    if (failures === 0) rmSync(repo, { recursive: true, force: true })
+    if (failures === 0) {
+      // Best effort: the app may still be shutting down and holding the folder
+      // (Windows then answers EBUSY). A leftover temp dir is not a test failure.
+      try {
+        rmSync(repo, { recursive: true, force: true })
+      } catch {
+        console.log(`     left the fixture behind: ${repo}`)
+      }
+    }
   }
 
   console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) failed`)

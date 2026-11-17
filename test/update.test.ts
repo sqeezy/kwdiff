@@ -2,11 +2,15 @@ import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
 import {
+  BlurActive,
   DebouncedSearch,
   FocusSelector,
+  LoadConfig,
   LoadPatch,
   LoadRefs,
   LoadSelection,
+  OpenRepo,
+  PickRepo,
   ScrollDiffLines,
   ScrollToHunk,
   matchingHunk,
@@ -815,6 +819,201 @@ describe('search-to-hunk', () => {
       model(m => {
         expect(m.hunkIndex).toBe(1)
       }),
+    )
+  })
+})
+
+// Startup is the path every launch takes: read the config, reopen the last
+// repository, restore the branch the search remembers.
+describe('startup', () => {
+  test('startup asks the config, and does nothing else', () => {
+    story(
+      update,
+      given({ ...base, repo: null }),
+      message(Message.Startup()),
+      Command.resolve(
+        LoadConfig,
+        Message.SucceededConfig({ recents: [], last: null, branches: [] }),
+      ),
+      model(m => {
+        expect(m.repo).toBeNull()
+      }),
+    )
+  })
+
+  test('the last repository opens again, with its remembered branch', () => {
+    story(
+      update,
+      given({ ...base, repo: null, recents: [], branches: [] }),
+      message(
+        Message.SucceededConfig({
+          recents: ['C:\\work\\other'],
+          last: 'C:\\work\\other',
+          branches: [{ root: 'C:\\work\\other', branch: 'release/4.2' }],
+        }),
+      ),
+      Command.resolve(OpenRepo, Message.OpenedRepo({ name: 'other', root: 'C:\\work\\other' })),
+      Command.resolve(LoadRefs, Message.SucceededRefs({ refs: [] })),
+      model(m => {
+        expect(m.repo?.root).toBe('C:\\work\\other')
+        expect(m.branch).toBe('release/4.2')
+        expect(m.recents.map(entry => entry.root)).toContain('C:\\work\\other')
+      }),
+    )
+  })
+
+  test('no last repository opens nothing, but the recents are still merged', () => {
+    story(
+      update,
+      given({ ...base, repo: null, recents: [{ name: 'here', root: 'C:\\work\\here' }] }),
+      message(
+        Message.SucceededConfig({
+          recents: ['C:\\work\\a', 'C:\\work\\b'],
+          last: null,
+          branches: [],
+        }),
+      ),
+      model(m => {
+        expect(m.repo).toBeNull()
+        expect(m.recents.map(entry => entry.name)).toEqual(
+          expect.arrayContaining(['here', 'a', 'b']),
+        )
+      }),
+    )
+  })
+})
+
+describe('the open flow', () => {
+  test('the open button asks the picker; cancelling changes nothing', () => {
+    story(
+      update,
+      given(base),
+      message(Message.ClickedOpen()),
+      Command.resolve(PickRepo, Message.PickCancelled()),
+      model(m => {
+        expect(m.repo).toEqual(base.repo)
+        expect(m.error).toBeNull()
+      }),
+    )
+  })
+
+  test('a picked folder is opened', () => {
+    story(
+      update,
+      given(base),
+      message(Message.PickedRepo({ path: 'C:\\work\\other' })),
+      Command.resolve(OpenRepo, Message.FailedOpen({ message: 'fatal: no such path' })),
+      model(m => {
+        expect(m.error?.kind).toBe('not-a-repo')
+      }),
+    )
+  })
+})
+
+describe('search edge cases', () => {
+  test('the code toggle asks again with `-a` on', () => {
+    const out = update(base, Message.ToggledCode())
+    expect(out.model.code).toBe(true)
+    const command = out.commands?.[0] as { name: string; args?: Record<string, unknown> } | undefined
+    expect(command?.name).toBe('DebouncedSearch')
+    expect(command?.args).toMatchObject({ code: true, keyword: 'ABC-123' })
+  })
+
+  test('a failed search says why and stops the spinner', () => {
+    story(
+      update,
+      given({ ...base, searchId: 4, searching: true, error: null }),
+      message(Message.FailedSearch({ id: 4, message: 'fatal: bad revision' })),
+      model(m => {
+        expect(m.searching).toBe(false)
+        expect(m.error).toEqual({ kind: 'search', message: 'fatal: bad revision' })
+      }),
+    )
+  })
+
+  test('a failure from an older generation is ignored', () => {
+    story(
+      update,
+      given({ ...base, searchId: 4, searching: true, error: null }),
+      message(Message.FailedSearch({ id: 3, message: 'old' })),
+      model(m => {
+        expect(m.searching).toBe(true)
+        expect(m.error).toBeNull()
+      }),
+    )
+  })
+})
+
+describe('files and patches', () => {
+  const files = [
+    { path: 'a.ts', added: 1, removed: 0, isNew: false, matched: false },
+    { path: 'b.ts', added: 2, removed: 1, isNew: false, matched: false },
+  ]
+
+  test('clicking a file loads its patch under a new id', () => {
+    story(
+      update,
+      given({ ...base, files, fileIndex: 0, patchId: 2 }),
+      message(Message.SelectedFile({ index: 1 })),
+      Command.resolve(LoadPatch, Message.SucceededPatch({ id: 3, patch: '@@ -1 +1 @@\n+x', error: null })),
+      model(m => {
+        expect(m.fileIndex).toBe(1)
+        expect(m.patchId).toBe(3)
+        expect(m.patch).toBe('@@ -1 +1 @@\n+x')
+      }),
+    )
+  })
+
+  test('a patch from an older request never lands', () => {
+    story(
+      update,
+      given({ ...base, patchId: 3, patch: 'current' }),
+      message(Message.SucceededPatch({ id: 2, patch: 'stale', error: null })),
+      model(m => {
+        expect(m.patch).toBe('current')
+      }),
+    )
+  })
+
+  test('a shorter patch pulls the highlighted hunk back into range', () => {
+    story(
+      update,
+      given({ ...base, hunkIndex: 4, patchId: 1 }),
+      message(Message.SucceededPatch({ id: 1, patch: '@@ -1 +1 @@\n+x\n@@ -9 +9 @@\n+y', error: null })),
+      model(m => {
+        expect(m.hunkIndex).toBe(1)
+      }),
+    )
+  })
+})
+
+describe('focus messages', () => {
+  test('enter walks one pane deeper', () => {
+    story(
+      update,
+      given({ ...base, pane: 'search' }),
+      message(Message.PressedEnter()),
+      Command.resolve(FocusSelector, Message.ElementFocused()),
+      model(m => expect(m.pane).toBe('commits')),
+    )
+  })
+
+  test('pressing shift is tracked, so a click can extend a range', () => {
+    story(
+      update,
+      given({ ...base, shiftDown: false }),
+      message(Message.ShiftDown()),
+      model(m => expect(m.shiftDown).toBe(true)),
+    )
+  })
+
+  test('clicking a pane blurs the search field', () => {
+    story(
+      update,
+      given({ ...base, pane: 'search' }),
+      message(Message.BlurRequested()),
+      Command.resolve(BlurActive, Message.Blurred()),
+      model(m => expect(m.pane).toBe('search')),
     )
   })
 })
