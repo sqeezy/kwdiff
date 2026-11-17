@@ -1,8 +1,9 @@
-import { Effect, Option, Schema } from 'effect'
+import { Effect, Option, Queue, Schema, Stream } from 'effect'
 import { Command, Subscription, type Update } from 'foldkit'
 import { focus, streamFromEventFilterMap, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
 import { open } from '@tauri-apps/plugin-dialog'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
@@ -267,6 +268,26 @@ const questionMark = Subscription.persistentEntry(
   }),
 )
 
+// OS file drops arrive as Tauri webview events, which are a callback, not a DOM
+// event: a Stream.callback keeps it a Subscription, so the listener lives and
+// dies with the app instead of with a Command.
+const droppedRepo = Subscription.persistentEntry(
+  Stream.callback<Message>(queue =>
+    Effect.gen(function* () {
+      if (!isTauri()) return
+      const unlisten = yield* Effect.promise(() =>
+        getCurrentWebview().onDragDropEvent(event => {
+          if (event.payload.type === 'drop' && event.payload.paths.length > 0) {
+            const path = event.payload.paths[0]
+            if (path !== undefined) Queue.offerUnsafe(queue, Message.DroppedPath({ path }))
+          }
+        }),
+      )
+      yield* Effect.addFinalizer(() => Effect.sync(() => unlisten()))
+    }),
+  ),
+)
+
 const paneSelector = (pane: Model['pane']): string =>
   pane === 'search'
     ? '#kw-search'
@@ -503,6 +524,11 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
     // Opening the panel puts the caret in the first field: the search box keeps
     // focus otherwise, and every single-key shortcut would type into it.
+    // A folder dropped on the window opens it: the OS hands the path to the
+    // webview (dragDropEnabled), a subscription turns it into this message, and
+    // `OpenRepo` resolves the root upward like the picker does.
+    DroppedPath: ({ path }) => ({ model, commands: [OpenRepo({ path })] }),
+
     // The body strip above the patch: three lines by default, all of it on
     // request.
     ToggledBody: () => ({ model: modifyFields(model, { bodyExpanded: () => !model.bodyExpanded }) }),
@@ -866,6 +892,7 @@ export const init = (): Update.Return<Model, Message> => {
 }
 
 export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
+  droppedRepo,
   questionMark,
   shiftDown,
   shiftUp,
