@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-26
+
+### Added — a spike, not a feature
+
+- **`F2` opens an `@effect/ui` spike** (ANT-83): the three-pane screen rebuilt in
+  the Effect team's framework, over the running app, against the same repository
+  through the same `gitApi`. About 380 lines: four `Command.Service`s (search
+  with the same 250 ms debounce and generation guard, selection, patch), one
+  `Mount` that starts the first search, and a view that reuses the app's Tailwind
+  classes, its patch gutter and its ids behind a `spike-` prefix. `F2` again
+  interrupts the fibre, removes the host element, and the Foldkit app underneath
+  carries on untouched.
+- **It ships temporarily and costs 138 kB** (dist 361 → 500 kB, gzip +47 kB).
+  Remove it when the migration lands or is dropped; nothing depends on it.
+
+### Tests
+
+- 5 e2e checks in the real window: F2 mounts it, it searches the repository, a
+  tick loads its files, a file renders its patch, F2 takes it down — 62 checks.
+
 ## [0.9.0] - 2026-11-17
 
 ### Added

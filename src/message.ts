@@ -40,6 +40,8 @@ export const Message = defineMessageUnion({
   },
   EndedSplit: {},
   ResetSplit: {},
+  ToggledSpike: {},
+  SpikeToggled: {},
   DroppedPath: { path: Schema.String },
   SucceededSearch: { id: Schema.Number, commits: Schema.Array(Commit) },
   FailedSearch: { id: Schema.Number, message: Schema.String },

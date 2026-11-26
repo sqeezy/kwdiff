@@ -1,4 +1,4 @@
-import { Effect, Option, Queue, Schema, Stream } from 'effect'
+import { Effect, Fiber, Layer, Option, Queue, Schema, Stream } from 'effect'
 import { Command, Subscription, type Update } from 'foldkit'
 import { focus, streamFromEventFilterMap, streamFromKeyBindings } from 'foldkit/dom'
 import { modifyFields } from 'foldkit/struct'
@@ -7,6 +7,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
+import { mountSpike } from './spike'
 import { Message } from './message'
 import { Filters, Split } from './model'
 import type { Model } from './model'
@@ -304,6 +305,33 @@ const droppedRepo = Subscription.persistentEntry(
     }),
   ),
 )
+
+// The Effect UI spike (ANT-83) is a separate app mounted over this one. It is a
+// spike, so the Fibre lives here, in a module variable: opening starts it,
+// opening again interrupts it and drops the host element.
+let spike: ReturnType<typeof Effect.runFork> | null = null
+
+export const ToggleSpike = Command.define('ToggleSpike', {
+  args: { repo: Schema.String },
+  messages: [Message.SpikeToggled],
+  execute: ({ repo }) =>
+    Effect.sync(() => {
+      const host = document.getElementById('spike-host')
+      if (host !== null) {
+        if (spike !== null) {
+          Effect.runFork(Fiber.interrupt(spike))
+          spike = null
+        }
+        host.remove()
+        return Message.SpikeToggled()
+      }
+      const element = document.createElement('div')
+      element.id = 'spike-host'
+      document.body.appendChild(element)
+      spike = Effect.runFork(Layer.launch(mountSpike(repo, element)))
+      return Message.SpikeToggled()
+    }),
+})
 
 // The splitter drag lives on the document, not on the handle: the pointer leaves
 // a 5 px handle immediately. It reports positions only — StartedSplit snapshots
@@ -604,6 +632,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     // The body strip above the patch: three lines by default, all of it on
     // request.
     ToggledBody: () => ({ model: modifyFields(model, { bodyExpanded: () => !model.bodyExpanded }) }),
+
+    ToggledSpike: () =>
+      model.repo === null ? { model } : { model, commands: [ToggleSpike({ repo: model.repo.root })] },
+    SpikeToggled: () => ({ model }),
 
     // Splitter drags. The pointer side (a subscription) only reports where the
     // pointer is; every size rule lives here, in the model.
@@ -1049,6 +1081,7 @@ export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
         { keys: 't', mapEvent: () => Message.UsedCommitAsEndpoint({ slot: 'to' }) },
         { keys: 'x', mapEvent: () => Message.SwappedEndpoints() },
         { keys: 'r', mapEvent: () => Message.Refreshed() },
+        { keys: 'F2', mapEvent: () => Message.ToggledSpike() },
         { keys: 'Space', mapEvent: () => Message.PressedSpace() },
         { keys: 'F1', mapEvent: () => Message.ToggledKeymap() },
       ],

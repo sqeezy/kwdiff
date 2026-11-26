@@ -145,6 +145,8 @@ async function http(path, method = 'GET', body) {
 }
 
 const KEYS = {
+  F1: '\uE031',
+  F2: '\uE032',
   Tab: '\uE004',
   Enter: '\uE007',
   Escape: '\uE00C',
@@ -794,7 +796,52 @@ async function main() {
     )
     check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
 
-    // 13. ? opens the keymap (it is read from a raw keydown listener, because
+    // 13. The @effect/ui spike (ANT-83): F2 mounts a second app over this one,
+    //     against the same repository, and F2 takes it down again.
+    await press('F2')
+    const spikeUp = await waitFor(
+      'return document.getElementById("spike-root") !== null',
+      value => value === true,
+      15000,
+    )
+    check('F2 mounts the effect/ui spike', spikeUp === true)
+
+    const spikeCommits = await waitFor(
+      'return document.querySelectorAll("#spike-commits li").length',
+      value => value > 0,
+      25000,
+    )
+    check('the spike searches the real repository', spikeCommits > 0, `rows=${spikeCommits}`)
+
+    await exec(
+      'const rows = [...document.querySelectorAll("#spike-commits li button")]; if (rows[0]) rows[0].click();',
+    )
+    const spikeFiles = await waitFor(
+      'return document.querySelectorAll("#spike-files li").length',
+      value => value > 0,
+      25000,
+    )
+    check('the spike loads files for a ticked commit', spikeFiles > 0, `rows=${spikeFiles}`)
+
+    await exec(
+      'const rows = [...document.querySelectorAll("#spike-files li button")]; if (rows[0]) rows[0].click();',
+    )
+    const spikePatch = await waitFor(
+      'return (document.getElementById("spike-diff")?.textContent ?? "").length',
+      value => value > 40,
+      25000,
+    )
+    check('the spike renders a patch', spikePatch > 40, `chars=${spikePatch}`)
+
+    await press('F2')
+    const spikeDown = await waitFor(
+      'return document.getElementById("spike-root") === null',
+      value => value === true,
+      5000,
+    )
+    check('F2 takes the spike down again', spikeDown === true)
+
+    // 14. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')
