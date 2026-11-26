@@ -1,6 +1,6 @@
 # kwdiff — a review window for branches that share no ancestor
 
-*For kwdiff 0.9.0 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
+*For kwdiff 0.9.1 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
 
 ## What it is
 

@@ -1,6 +1,6 @@
 # kwdiff — feature map
 
-*For kwdiff 0.9.0. Everything the app does today, where it lives, and what
+*For kwdiff 0.9.1. Everything the app does today, where it lives, and what
 proves it.*
 
 This is the **reference** page: complete, terse, one row per capability. The
@@ -149,12 +149,21 @@ blame, PR hosting integration, multi-repo tabs, plugins, i18n, telemetry,
 macOS/Linux, signing and auto-update (Later). The reasoning is in
 [`spec.md`](spec.md) and the closed wayfinder map.
 
-## 13. Verification
+## 13. Spike (temporary)
+
+| Feature | Behaviour | Code | Proven by |
+| --- | --- | --- | --- |
+| `@effect/ui` spike | `F2` mounts a second app over this one — the three panes in the Effect team's framework, against the same repository — and `F2` takes it down; not part of the product | `src/spike.ts`, `app.ts · ToggleSpike` | e2e (5 checks) |
+
+Remove it with ANT-83 when the migration lands or is dropped. It costs 138 kB of
+bundle while it ships.
+
+## 14. Verification
 
 | Suite | Count | Command |
 | --- | --- | --- |
 | Update loop | 92 | `npm test` |
 | Patch gutter and cap | 7 | `npm test` |
 | Rust unit tests | 7 | `cargo test --manifest-path src-tauri/Cargo.toml --lib` |
-| Window e2e (gate) | 57 checks | `npm run e2e` (needs a desktop session) |
+| Window e2e (gate) | 62 checks | `npm run e2e` (needs a desktop session) |
 | Docs | this map, the guide and the built HTML agree | `npm run docs:check` |
