@@ -1,6 +1,6 @@
 # kwdiff — a review window for branches that share no ancestor
 
-*For kwdiff 0.8.0 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
+*For kwdiff 0.9.0 · Windows 10 or 11, 64-bit · needs git 2.28 or newer*
 
 ## What it is
 
@@ -39,6 +39,10 @@ on the window opens it too.
 Three panes: **commits** on the left, the **files** those commits touch in the
 middle, the **patch** of the selected file on the right. The commit's message
 body sits above the patch.
+
+The lines between the panes are **splitters** — drag one to give a pane more
+room, double-click it to go back to the default. On a small screen the panes
+stack instead of sitting side by side, and the same lines resize their heights.
 
 ## Five things you will do
 

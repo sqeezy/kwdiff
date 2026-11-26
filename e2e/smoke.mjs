@@ -720,7 +720,53 @@ async function main() {
     )
     check('show all renders the rest', expandedBar.includes('all'), `bar=${expandedBar.slice(0, 24)}`)
 
-    // 10. Refresh: the window re-reads git and the list survives it.
+    // 10. The splitters: a pointer drag resizes a pane, a double-click resets it.
+    const splitBefore = await exec(`
+      const panes = document.getElementById("panes");
+      return panes ? getComputedStyle(panes).gridTemplateColumns.split(" ")[0] : null;
+    `)
+    await exec(`
+      const splitter = document.querySelector('[data-split="columns-commits"]');
+      if (!splitter) return false;
+      const rect = splitter.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + 60;
+      splitter.dispatchEvent(new PointerEvent("pointerdown", { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
+      return true;
+    `)
+    await sleep(150)
+    await exec(`
+      const splitter = document.querySelector('[data-split="columns-commits"]');
+      const rect = splitter ? splitter.getBoundingClientRect() : null;
+      const x = rect ? rect.left + rect.width / 2 : 320;
+      const y = rect ? rect.top + 60 : 60;
+      document.dispatchEvent(new PointerEvent("pointermove", { clientX: x + 60, clientY: y, bubbles: true, pointerId: 1 }));
+      document.dispatchEvent(new PointerEvent("pointerup", { clientX: x + 60, clientY: y, bubbles: true, pointerId: 1 }));
+      return true;
+    `)
+    await sleep(200)
+    const splitAfter = await exec(`
+      const panes = document.getElementById("panes");
+      return panes ? getComputedStyle(panes).gridTemplateColumns.split(" ")[0] : null;
+    `)
+    check(
+      'dragging a splitter widens the pane',
+      splitBefore !== null && splitAfter !== null && parseInt(splitAfter) - parseInt(splitBefore) === 60,
+      `${splitBefore} → ${splitAfter}`,
+    )
+
+    await exec(`
+      const splitter = document.querySelector('[data-split="columns-commits"]');
+      if (splitter) splitter.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    `)
+    await sleep(200)
+    const splitReset = await exec(`
+      const panes = document.getElementById("panes");
+      return panes ? getComputedStyle(panes).gridTemplateColumns.split(" ")[0] : null;
+    `)
+    check('double-click restores the default width', splitReset === splitBefore, `${splitReset}`)
+
+    // 11. Refresh: the window re-reads git and the list survives it.
     await press('r')
     await sleep(600)
     const refreshed = await waitFor(
@@ -730,7 +776,7 @@ async function main() {
     )
     check('refresh keeps a populated list', refreshed >= 1, `rows=${refreshed}`)
 
-    // 11. The two keys a reviewer presses first: `/` to the search field, and
+    // 12. The two keys a reviewer presses first: `/` to the search field, and
     //    `enter` one pane deeper.
     await press('/')
     const searchFocus = await waitFor(
@@ -748,7 +794,7 @@ async function main() {
     )
     check('enter walks one pane deeper', entered === 'commit-list', `focus=${entered}`)
 
-    // 12. ? opens the keymap (it is read from a raw keydown listener, because
+    // 13. ? opens the keymap (it is read from a raw keydown listener, because
     //    the binding table's shift matching misses it on some layouts).
     await press('Escape')
     await press('?')

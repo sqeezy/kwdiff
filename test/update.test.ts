@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   BlurActive,
+  DEFAULT_SPLIT,
   DebouncedSearch,
   FocusSelector,
   LoadConfig,
@@ -62,6 +63,8 @@ const base: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  split: { commits: 320, files: 214, rowsCommits: 0.34, rowsFiles: 0.26 },
+  drag: null,
   filters: { ...noFilters },
   showFilters: false,
   showRepos: false,
@@ -1212,6 +1215,72 @@ describe('a capped patch', () => {
         expect(m.fullPatch).toBe(false)
         expect(m.patch).toBe('@@ -1 +1 @@\n+x')
       }),
+    )
+  })
+})
+
+// The splitters: the pointer reports positions, update does the arithmetic and
+// the clamps. A drag computes from the sizes it started with, never from deltas.
+describe('resizing panes', () => {
+  const dragStart = (split: string, x = 0, y = 0) =>
+    Message.StartedSplit({ split: split as never, x, y })
+
+  test('dragging the commits splitter widens it by the pointer delta', () => {
+    story(
+      update,
+      given(base),
+      message(dragStart('columns-commits', 320, 0)),
+      message(Message.MovedSplit({ x: 420, y: 0, width: 1280, height: 800 })),
+      model(m => expect(m.split.commits).toBe(420)),
+      message(Message.EndedSplit()),
+      model(m => expect(m.drag).toBeNull()),
+    )
+  })
+
+  test('a pane cannot be dragged past the patch', () => {
+    story(
+      update,
+      given(base),
+      message(dragStart('columns-files', 540, 0)),
+      message(Message.MovedSplit({ x: 2000, y: 0, width: 1280, height: 800 })),
+      model(m => {
+        expect(m.split.files).toBe(1280 - 320 - 260)
+      }),
+    )
+  })
+
+  test('the stacked rows are fractions and keep a floor', () => {
+    story(
+      update,
+      given(base),
+      message(dragStart('rows-commits', 0, 200)),
+      message(Message.MovedSplit({ x: 0, y: 280, width: 720, height: 800 })),
+      model(m => expect(m.split.rowsCommits).toBeCloseTo(0.44, 2)),
+      // The two stacked panes may not take more than 80% of the area.
+      message(dragStart('rows-commits', 0, 200)),
+      message(Message.MovedSplit({ x: 0, y: 600, width: 720, height: 800 })),
+      model(m => expect(m.split.rowsCommits).toBeCloseTo(0.54, 2)),
+      message(dragStart('rows-commits', 0, 0)),
+      message(Message.MovedSplit({ x: 0, y: -800, width: 720, height: 800 })),
+      model(m => expect(m.split.rowsCommits).toBe(0.12)),
+    )
+  })
+
+  test('double-click restores the defaults', () => {
+    story(
+      update,
+      given({ ...base, split: { ...DEFAULT_SPLIT, commits: 600 } }),
+      message(Message.ResetSplit()),
+      model(m => expect(m.split).toEqual(DEFAULT_SPLIT)),
+    )
+  })
+
+  test('a move without a drag start does nothing', () => {
+    story(
+      update,
+      given(base),
+      message(Message.MovedSplit({ x: 900, y: 0, width: 1280, height: 800 })),
+      model(m => expect(m.split).toEqual(DEFAULT_SPLIT)),
     )
   })
 })

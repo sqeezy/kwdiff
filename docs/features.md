@@ -1,6 +1,6 @@
 # kwdiff — feature map
 
-*For kwdiff 0.8.0. Everything the app does today, where it lives, and what
+*For kwdiff 0.9.0. Everything the app does today, where it lives, and what
 proves it.*
 
 This is the **reference** page: complete, terse, one row per capability. The
@@ -104,6 +104,8 @@ How to read a row:
 | Feature | Behaviour | Code | Proven by |
 | --- | --- | --- | --- |
 | Panes | commits · files · diff, a fourth rail reserved for notes | `ui.ts` grid | screenshot |
+| Resizable panes | drag the 5 px line between two panes; on a narrow window the panes stack and the same lines resize their heights; double-click resets to 320/214 px (34/26 % stacked) | `app.ts · StartedSplit`/`MovedSplit`, `ui.ts` splitters, `model.ts · Split` | resizing panes (5), e2e (drag + reset) |
+| Window size | starts at 1280×800, can shrink to **720×480**; the layout stacks under 1024 px | `tauri.conf.json`, `ui.ts` breakpoints | screenshot at 720 px |
 | Focus | `tab` walks search → commits → files → diff; `esc` walks back, then closes keymap/filters/repo row | `app.ts · Descended`, `Ascended`, `PressedEscape` | pane navigation (4), e2e (esc walk) |
 | Keymap | `?` or `F1` opens the list; `esc`/`?` closes it | `app.ts · questionMark`, `ToggledKeymap` | keymap (2), e2e |
 | Slash | `/` puts the caret in the search field | `app.ts · FocusedSearch` | e2e |
@@ -115,7 +117,8 @@ How to read a row:
 | --- | --- | --- |
 | Recents (≤10), last repository, branch per repository | `%APPDATA%\dev.sqeezy.kwdiff\config.json`, written by Rust only | `config.rs` |
 | Filters, compare endpoints, body expansion, panel state | memory only | `app.ts` Model |
-| Window size/position | not remembered (fixed 1280×800) | `tauri.conf.json` |
+| Window size/position | not remembered (opens at 1280×800) | `tauri.conf.json` |
+| Pane sizes | memory only, reset on launch | `app.ts · DEFAULT_SPLIT` |
 
 ## 10. Error and empty states
 
@@ -150,8 +153,8 @@ macOS/Linux, signing and auto-update (Later). The reasoning is in
 
 | Suite | Count | Command |
 | --- | --- | --- |
-| Update loop | 87 | `npm test` |
+| Update loop | 92 | `npm test` |
 | Patch gutter and cap | 7 | `npm test` |
 | Rust unit tests | 7 | `cargo test --manifest-path src-tauri/Cargo.toml --lib` |
-| Window e2e (gate) | 55 checks | `npm run e2e` (needs a desktop session) |
+| Window e2e (gate) | 57 checks | `npm run e2e` (needs a desktop session) |
 | Docs | this map, the guide and the built HTML agree | `npm run docs:check` |

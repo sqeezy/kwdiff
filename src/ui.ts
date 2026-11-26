@@ -419,7 +419,18 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 
     // ---- three panes -----------------------------------------------------
     h.div(
-      [h.Class('relative grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,214px)_minmax(0,1fr)]')],
+      [
+        h.Attribute('id', 'panes'),
+        // Sizes travel as custom properties: one grid, and CSS decides whether
+        // they are columns (wide) or rows (stacked).
+        h.Attribute(
+          'style',
+          `--split-commits:${model.split.commits}px; --split-files:${model.split.files}px; --rows-commits:${(model.split.rowsCommits * 100).toFixed(2)}%; --rows-files:${(model.split.rowsFiles * 100).toFixed(2)}%`,
+        ),
+        h.Class(
+          'relative grid min-h-0 flex-1 grid-cols-1 grid-rows-[var(--rows-commits)_var(--rows-files)_minmax(0,1fr)] lg:grid-cols-[var(--split-commits)_var(--split-files)_minmax(0,1fr)] lg:grid-rows-1',
+        ),
+      ],
       [
         // commits
         h.section([h.Class(`flex min-h-0 flex-col border-b ${border} lg:border-b-0 lg:border-r`)], [
@@ -452,7 +463,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Attribute('tabindex', '0'),
               h.Attribute('aria-label', 'Commits'),
               h.Class(
-                `max-h-[34vh] overflow-auto py-1 outline-none lg:max-h-none ${
+                `min-h-0 flex-1 overflow-auto py-1 outline-none ${
                   model.pane === 'commits' ? 'ring-1 ring-inset ring-[#3fb950]/50' : ''
                 }`,
               ),
@@ -546,7 +557,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Attribute('tabindex', '0'),
               h.Attribute('aria-label', 'Files'),
               h.Class(
-                `max-h-[26vh] overflow-auto py-1 outline-none lg:max-h-none ${
+                `min-h-0 flex-1 overflow-auto py-1 outline-none ${
                   model.pane === 'files' ? 'ring-1 ring-inset ring-[#3fb950]/50' : ''
                 }`,
               ),
@@ -713,6 +724,39 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
                 renderPatch(capped.rows, model.hunkIndex, h),
               ),
         ]),
+
+        // splitters: 5 px, invisible until hovered; double-click restores defaults
+        ...[
+          ['columns-commits', 'Resize the commits pane', 'absolute inset-y-0 z-20 hidden w-[5px] -translate-x-1/2 cursor-col-resize bg-[#1f2733] hover:bg-[#3fb950]/50 lg:block', 'left: var(--split-commits)'],
+          ['columns-files', 'Resize the files pane', 'absolute inset-y-0 z-20 hidden w-[5px] -translate-x-1/2 cursor-col-resize bg-[#1f2733] hover:bg-[#3fb950]/50 lg:block', 'left: calc(var(--split-commits) + var(--split-files))'],
+          ['rows-commits', 'Resize the commits pane', 'absolute inset-x-0 z-20 h-[5px] -translate-y-1/2 cursor-row-resize bg-[#1f2733] hover:bg-[#3fb950]/50 lg:hidden', 'top: var(--rows-commits)'],
+          ['rows-files', 'Resize the files pane', 'absolute inset-x-0 z-20 h-[5px] -translate-y-1/2 cursor-row-resize bg-[#1f2733] hover:bg-[#3fb950]/50 lg:hidden', 'top: calc(var(--rows-commits) + var(--rows-files))'],
+        ].map(([split, label, classes, position]) =>
+          h.div(
+            [
+              h.Attribute('data-split', split ?? ''),
+              h.Attribute('aria-label', label ?? 'Resize'),
+              h.Attribute('title', 'Drag to resize · double-click to reset'),
+              h.OnDoubleClick(Message.ResetSplit()),
+              h.Class(classes ?? ''),
+              h.Attribute('style', position ?? ''),
+            ],
+            [],
+          ),
+        ),
+        // While dragging, the cursor and the text selection belong to the drag.
+        model.drag === null
+          ? h.span([])
+          : h.div(
+              [
+                h.Class(
+                  `fixed inset-0 z-50 select-none ${
+                    model.drag.split.startsWith('columns') ? 'cursor-col-resize' : 'cursor-row-resize'
+                  }`,
+                ),
+              ],
+              [],
+            ),
 
         // states over the panes
         model.repo === null

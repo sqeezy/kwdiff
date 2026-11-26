@@ -1,7 +1,7 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 
-import { Commit, FilePatch, Filters } from './model'
+import { Commit, FilePatch, Filters, SplitName } from './model'
 
 export const Message = defineMessageUnion({
   // repository
@@ -31,6 +31,15 @@ export const Message = defineMessageUnion({
   Refreshed: {},
   ToggledBody: {},
   ToggledFullPatch: {},
+  StartedSplit: { split: SplitName, x: Schema.Number, y: Schema.Number },
+  MovedSplit: {
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+  },
+  EndedSplit: {},
+  ResetSplit: {},
   DroppedPath: { path: Schema.String },
   SucceededSearch: { id: Schema.Number, commits: Schema.Array(Commit) },
   FailedSearch: { id: Schema.Number, message: Schema.String },

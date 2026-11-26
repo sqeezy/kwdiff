@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-17
+
+### Added
+
+- **Resizable panes.** The lines between commits, files and the patch are
+  splitters: drag to resize, double-click to reset (320 / 214 px). Under 1024 px
+  the panes stack — as they did — and the same splitters resize their **heights**
+  (34 % / 26 % / the rest), so a small window gives the patch real room instead
+  of three strips. The drag reports pointer positions only; every clamp lives in
+  `update`, so a pane can never be dragged over the patch.
+- **A smaller window floor**: `minWidth` 900 → **720**, `minHeight` 560 → **480**,
+  so the window fits a 1280×720 screen at 150 % scaling where 900×560 did not.
+
+5 story tests over the arithmetic and the clamps, and two e2e checks that drag a
+splitter 60 px in the real window and reset it with a double-click.
+
 ## [0.8.0] - 2026-11-17
 
 ### Added

@@ -8,11 +8,28 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { configApi, gitApi } from './api'
 import { isTauri } from './git'
 import { Message } from './message'
-import { Filters } from './model'
+import { Filters, Split } from './model'
 import type { Model } from './model'
 import type { Endpoints, FilePatch, RootOf } from './types'
 
 const DEBOUNCE = '250 millis'
+
+// A pane narrower than this is a trap; the patch keeps the largest minimum.
+const MIN_PANE = 140
+const MIN_PATCH = 260
+const MIN_ROW = 0.12
+
+// 320/214 px are the widths the three-column layout grew up with; the stacked
+// layout splits the height 34/26 and gives the rest to the patch.
+export const DEFAULT_SPLIT: typeof Split.Type = {
+  commits: 320,
+  files: 214,
+  rowsCommits: 0.34,
+  rowsFiles: 0.26,
+}
+
+const clamp = (value: number, low: number, high: number): number =>
+  Math.min(Math.max(value, low), Math.max(low, high))
 
 export const noFilters: typeof Filters.Type = {
   author: '',
@@ -288,6 +305,61 @@ const droppedRepo = Subscription.persistentEntry(
   ),
 )
 
+// The splitter drag lives on the document, not on the handle: the pointer leaves
+// a 5 px handle immediately. It reports positions only — StartedSplit snapshots
+// the sizes, MovedSplit carries pointer and pane geometry, update does the maths.
+const splitDrag = Subscription.persistentEntry(
+  Stream.callback<Message>(queue =>
+    Effect.gen(function* () {
+      if (typeof document === 'undefined') return
+      let active: string | null = null
+
+      const down = (event: PointerEvent) => {
+        const target = event.target instanceof Element ? event.target : null
+        const split = target?.closest('[data-split]')?.getAttribute('data-split')
+        if (split === undefined || split === null) return
+        active = split
+        event.preventDefault()
+        const name = split as typeof Message.StartedSplit.Type.split
+        Queue.offerUnsafe(queue, Message.StartedSplit({ split: name, x: event.clientX, y: event.clientY }))
+      }
+
+      const move = (event: PointerEvent) => {
+        if (active === null) return
+        const panes = document.getElementById('panes')?.getBoundingClientRect()
+        Queue.offerUnsafe(
+          queue,
+          Message.MovedSplit({
+            x: event.clientX,
+            y: event.clientY,
+            width: panes?.width ?? window.innerWidth,
+            height: panes?.height ?? window.innerHeight,
+          }),
+        )
+      }
+
+      const up = () => {
+        if (active === null) return
+        active = null
+        Queue.offerUnsafe(queue, Message.EndedSplit())
+      }
+
+      document.addEventListener('pointerdown', down)
+      document.addEventListener('pointermove', move)
+      document.addEventListener('pointerup', up)
+      document.addEventListener('pointercancel', up)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          document.removeEventListener('pointerdown', down)
+          document.removeEventListener('pointermove', move)
+          document.removeEventListener('pointerup', up)
+          document.removeEventListener('pointercancel', up)
+        }),
+      )
+    }),
+  ),
+)
+
 const paneSelector = (pane: Model['pane']): string =>
   pane === 'search'
     ? '#kw-search'
@@ -532,6 +604,59 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     // The body strip above the patch: three lines by default, all of it on
     // request.
     ToggledBody: () => ({ model: modifyFields(model, { bodyExpanded: () => !model.bodyExpanded }) }),
+
+    // Splitter drags. The pointer side (a subscription) only reports where the
+    // pointer is; every size rule lives here, in the model.
+    StartedSplit: ({ split, x, y }) => ({
+      model: modifyFields(model, {
+        drag: () => ({
+          split,
+          x0: x,
+          y0: y,
+          commits0: model.split.commits,
+          files0: model.split.files,
+          rowsCommits0: model.split.rowsCommits,
+          rowsFiles0: model.split.rowsFiles,
+        }),
+      }),
+    }),
+
+    MovedSplit: ({ x, y, width, height }) => {
+      if (model.drag === null) return { model }
+      const drag = model.drag
+      const dx = x - drag.x0
+      const dy = y - drag.y0
+      const ofColumns = drag.split.startsWith('columns')
+
+      if (drag.split === 'columns-commits') {
+        const commits = clamp(drag.commits0 + dx, MIN_PANE, width - drag.files0 - MIN_PATCH)
+        return { model: modifyFields(model, { split: () => ({ ...model.split, commits }) }) }
+      }
+      if (drag.split === 'columns-files') {
+        const files = clamp(drag.files0 + dx, MIN_PANE, width - drag.commits0 - MIN_PATCH)
+        return { model: modifyFields(model, { split: () => ({ ...model.split, files }) }) }
+      }
+      if (!ofColumns && drag.split === 'rows-commits') {
+        const rowsCommits = clamp(
+          drag.rowsCommits0 + dy / Math.max(1, height),
+          MIN_ROW,
+          0.8 - drag.rowsFiles0,
+        )
+        return { model: modifyFields(model, { split: () => ({ ...model.split, rowsCommits }) }) }
+      }
+      const rowsFiles = clamp(
+        drag.rowsFiles0 + dy / Math.max(1, height),
+        MIN_ROW,
+        0.8 - drag.rowsCommits0,
+      )
+      return { model: modifyFields(model, { split: () => ({ ...model.split, rowsFiles }) }) }
+    },
+
+    EndedSplit: () => ({ model: modifyFields(model, { drag: () => null }) }),
+
+    // Double-click a splitter: back to the sizes a first launch has.
+    ResetSplit: () =>
+      ({ model: modifyFields(model, { split: () => ({ ...DEFAULT_SPLIT }), drag: () => null }) }),
 
     // A capped patch can be shown whole; a new patch collapses it again.
     ToggledFullPatch: () => ({ model: modifyFields(model, { fullPatch: () => !model.fullPatch }) }),
@@ -862,6 +987,8 @@ const emptyModel: Model = {
   pane: 'search',
   hunkIndex: 0,
   branches: [],
+  split: { ...DEFAULT_SPLIT },
+  drag: null,
   filters: { ...noFilters },
   showFilters: false,
   showRepos: false,
@@ -898,6 +1025,7 @@ export const init = (): Update.Return<Model, Message> => {
 
 export const subscriptions = Subscription.make<Model, Message>()(_entry => ({
   droppedRepo,
+  splitDrag,
   questionMark,
   shiftDown,
   shiftUp,

@@ -25,6 +25,35 @@ export const GitError = Schema.Struct({
   message: Schema.String,
 })
 
+// The pane sizes. Columns are pixels (the wide layout); rows are fractions of
+// the pane area (the narrow layout), because a stacked layout has no width to
+// hang a pixel column off.
+export const Split = Schema.Struct({
+  commits: Schema.Number,
+  files: Schema.Number,
+  rowsCommits: Schema.Number,
+  rowsFiles: Schema.Number,
+})
+
+export const SplitName = Schema.Literals([
+  'columns-commits',
+  'columns-files',
+  'rows-commits',
+  'rows-files',
+])
+
+// A drag remembers where it started and what the sizes were then, so every move
+// computes from the same anchor instead of compounding deltas.
+export const SplitDrag = Schema.Struct({
+  split: SplitName,
+  x0: Schema.Number,
+  y0: Schema.Number,
+  commits0: Schema.Number,
+  files0: Schema.Number,
+  rowsCommits0: Schema.Number,
+  rowsFiles0: Schema.Number,
+})
+
 // The two-slot compare: both slots set is a tree diff (`git diff A B`), which
 // needs no common ancestor. One slot set is still tick mode.
 export const Endpoints = Schema.Struct({
@@ -63,6 +92,8 @@ export const Model = Schema.Struct({
   pane: Schema.Literals(['search', 'commits', 'files', 'diff']),
   hunkIndex: Schema.Number,
   branches: Schema.Array(Schema.Struct({ root: Schema.String, branch: Schema.String })),
+  split: Split,
+  drag: Schema.NullOr(SplitDrag),
   filters: Filters,
   showFilters: Schema.Boolean,
   showRepos: Schema.Boolean,
