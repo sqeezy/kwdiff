@@ -71,8 +71,11 @@ Tauri 2 (Windows x64, WebView2)
   `core:window:allow-set-title`); a small crash surface offers *Reopen last
   repository* instead of `location.reload()`.
 - No routing, no URL, no history. One window, one screen.
-- The grid is sized for a fourth rail: `minmax(0,320px) minmax(0,214px)
-  minmax(0,1fr)`. The notes rail of map #2 takes the right-hand column without
+- The grid starts at **320 px / 214 px / the rest** and every boundary is a
+  splitter: drag to resize, double-click to reset. Under 1024 px the same panes
+  stack and the splitters resize *heights* (34 % / 26 % / the rest), so a small
+  screen gets a usable patch instead of three strips. The grid still reserves a
+  fourth rail: the notes rail of map #2 takes the right-hand column without
   re-laying out the other three.
 
 ## Rust API (`src-tauri/src/git.rs`)
